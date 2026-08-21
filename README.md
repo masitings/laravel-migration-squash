@@ -440,8 +440,8 @@ This package is open-source software licensed under the [MIT license](LICENSE).
 ## 👤 Author
 
 **Masitings**
+- Website: https://masiting.dev
 - GitHub: https://github.com/masitings
-- Website: https://masitings.github.io
 
 ---
 
