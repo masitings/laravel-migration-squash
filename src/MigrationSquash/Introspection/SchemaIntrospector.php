@@ -2,6 +2,7 @@
 
 namespace MigrationSquash\Introspection;
 
+use Illuminate\Support\Facades\DB;
 use MigrationSquash\Schema\Table;
 
 class SchemaIntrospector
@@ -34,8 +35,6 @@ class SchemaIntrospector
      */
     protected function introspectMySQL(): array
     {
-        use \Illuminate\Support\Facades\DB;
-        
         $tables = [];
         
         // Get all tables except migrations table (if exists)
@@ -71,8 +70,6 @@ class SchemaIntrospector
      */
     protected function introspectSQLite(): array
     {
-        use \Illuminate\Support\Facades\DB;
-        
         $tables = [];
         
         try {
@@ -108,8 +105,6 @@ class SchemaIntrospector
      */
     protected function getMySQLColumns(string $tableName): array
     {
-        use \Illuminate\Support\Facades\DB;
-        
         $columns = DB::select("DESCRIBE `{$tableName}`");
         
         return array_map(function($col) {
@@ -129,8 +124,6 @@ class SchemaIntrospector
      */
     protected function getMySQLIndexes(string $tableName): array
     {
-        use \Illuminate\Support\Facades\DB;
-        
         $indexes = DB::select("SHOW INDEXES FROM `{$tableName}`");
         
         // Group by index name
@@ -163,8 +156,6 @@ class SchemaIntrospector
      */
     protected function getMySQLForeignKeys(string $tableName): array
     {
-        use \Illuminate\Support\Facades\DB;
-        
         $fks = DB::select("
             SELECT 
                 COLUMN_NAME as column_name,
@@ -186,8 +177,6 @@ class SchemaIntrospector
      */
     protected function getSQLiteColumns(string $tableName): array
     {
-        use \Illuminate\Support\Facades\DB;
-        
         $pragma = DB::select("PRAGMA table_info(`{$tableName}`)");
         
         return array_map(fn($col) => (array)$col, $pragma);
@@ -198,8 +187,6 @@ class SchemaIntrospector
      */
     protected function getSQLiteIndexes(string $tableName): array
     {
-        use \Illuminate\Support\Facades\DB;
-        
         $pragma = DB::select("PRAGMA index_list(`{$tableName}`)");
         
         return array_map(fn($idx) => (array)$idx, $pragma);

@@ -32,25 +32,25 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+        return new class extends Migration
+    {
     /**
      * Run the migrations.
      */
     public function up(): void
     {
-        Schema::create('{$tableName}', function (Blueprint \$table) {
+        Schema::create('{$tableName}', function (Blueprint $table) {
             // Columns
-            {$this->generateColumns(\$table)}
+            {$this->generateColumns($table)}
 
             // Primary key
-            \$table->primary('{$this->getPrimaryKeyColumn($table)}');
+            $table->primary('{$this->getPrimaryKeyColumn($table)}');
 
             // Indexes
-            {$this->generateIndexes(\$table)}
+            {$this->generateIndexes($table)}
 
             // Foreign keys
-            {$this->generateForeignKeys(\$table)}
+            {$this->generateForeignKeys($table)}
         });
     }
 

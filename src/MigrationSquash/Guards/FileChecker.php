@@ -43,10 +43,13 @@ class FileChecker
         $rawSql = [];
         $dataSeeding = [];
 
+        // Create visitor to scan migration code
         $visitor = new \PhpParser\NodeTraverser();
-        $visitor->addVisitor(new class ($rawSql, $dataSeeding) extends \PhpParser\NodeVisitor {
-            protected array &$rawSql;
-            protected array &$dataSeeding;
+        
+        // Define visitor class separately (inline anonymous class has issues)
+        $scannerVisitor = new class($rawSql, $dataSeeding) extends \PhpParser\NodeVisitor {
+            private array $rawSql;
+            private array $dataSeeding;
 
             public function __construct(array &$rawSql, array &$dataSeeding)
             {
@@ -81,18 +84,16 @@ class FileChecker
 
                         // Detect DB::table()->insert(), update(), delete()
                         if ($name->name === 'table') {
-                            $traverser = new \PhpParser\NodeTraverser();
-                            $traverser->addVisitor(new class ($this->dataSeeding) extends \PhpParser\NodeVisitor {
-                                protected array &$dataSeeding;
-                                protected ?\PhpParser\Node\Expr\FuncCall $tableCall = null;
-                                protected ?string $tableName = null;
+                            $nestedVisitor = new class extends \PhpParser\NodeVisitor {
+                                private array $dataSeeding;
+                                private ?string $tableName = null;
 
                                 public function __construct(array &$dataSeeding)
                                 {
-                                    $this->dataSeeding = &$dataSeeding;
+                                    $this->dataSeeding =& $dataSeeding;
                                 }
 
-                                public function enterNode(\PhpParser\Node $node): \PhpParser\Node|void
+                                public function enterNode(\PhpParser\Node $node): void
                                 {
                                     if ($node instanceof \PhpParser\Node\Expr\MethodCall &&
                                         $node->var instanceof \PhpParser\Node\Expr\StaticCall) {
@@ -131,18 +132,18 @@ class FileChecker
 
                                 public function leaveNode(\PhpParser\Node $node): void
                                 {
-                                    if ($node instanceof \PhpParser\Node\Statement) {
+                                    if ($node instanceof \PhpParser\Node\Stmt) {
                                         $this->tableName = null;
                                     }
                                 }
-                            });
+                            };
                             
-                            $traverser->traverse([$node]);
+                            $nestedVisitor->enterNode($node);
                         }
                     }
                 }
             }
-        });
+        };
 
         $visitor->traverse($stmts ?? []);
 
