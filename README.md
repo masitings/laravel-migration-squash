@@ -439,8 +439,9 @@ This package is open-source software licensed under the [MIT license](LICENSE).
 
 ## 👤 Author
 
-**Masitings**
+**Rafi Bagaskara Halilintar**
 - Website: https://masiting.dev
+- Email: rafi@techcanvas.tech
 - GitHub: https://github.com/masitings
 
 ---
