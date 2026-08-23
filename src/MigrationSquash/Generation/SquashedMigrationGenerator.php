@@ -2,202 +2,271 @@
 
 namespace MigrationSquash\Generation;
 
+use MigrationSquash\Schema\Column;
+use MigrationSquash\Schema\ForeignKey;
+use MigrationSquash\Schema\Index;
 use MigrationSquash\Schema\Table;
 
 class SquashedMigrationGenerator
 {
-    protected string $stubPath;
+    protected string $tableStubPath;
 
-    public function __construct(?string $stubPath = null)
+    protected string $fkStubPath;
+
+    public function __construct(?string $tableStubPath = null, ?string $fkStubPath = null)
     {
-        $this->stubPath = $stubPath ?? __DIR__ . '/Stubs/squashed-table.stub';
+        $this->tableStubPath = $tableStubPath ?? __DIR__.'/Stubs/squashed-table.stub';
+        $this->fkStubPath = $fkStubPath ?? __DIR__.'/Stubs/squashed-foreign-keys.stub';
     }
 
     /**
-     * Generate a squashed migration file for a single table
-     * 
-     * @param  Table  $table
-     * @param  string  $migrationName
-     * @return string Generated PHP code
+     * Generate a squashed migration file for a single table (without foreign keys).
+     *
+     * Foreign keys are generated separately via generateForeignKeyMigration()
+     * to avoid circular dependency issues (D-3).
      */
     public function generate(Table $table, string $migrationName): string
     {
-        $timestamp = $this->generateTimestamp();
-        $tableName = $table->name;
-        
-        $code = <<<PHP
-<?php
+        $stub = file_get_contents($this->tableStubPath);
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
+        $columnsCode = $this->generateColumns($table);
+        $primaryKeyCode = $this->generatePrimaryKey($table);
+        $indexesCode = $this->generateIndexes($table);
 
-        return new class extends Migration
-    {
+        $replacements = [
+            '{{TABLE_NAME}}' => $table->name,
+            '{{COLUMNS}}' => $columnsCode,
+            '{{PRIMARY_KEY}}' => $primaryKeyCode,
+            '{{INDEXES}}' => $indexesCode,
+        ];
+
+        return str_replace(array_keys($replacements), array_values($replacements), $stub);
+    }
+
     /**
-     * Run the migrations.
+     * Generate a single migration file containing all foreign keys for all tables.
+     *
+     * @param  array<string, Table>  $tables  Map of table name -> Table
+     * @return string|null Generated PHP code, or null if no foreign keys exist
      */
-    public function up(): void
+    public function generateForeignKeyMigration(array $tables): ?string
     {
-        Schema::create('{$tableName}', function (Blueprint $table) {
-            // Columns
-            {$this->generateColumns($table)}
+        $definitions = [];
+        $drops = [];
 
-            // Primary key
-            $table->primary('{$this->getPrimaryKeyColumn($table)}');
+        foreach ($tables as $table) {
+            if (empty($table->foreignKeys)) {
+                continue;
+            }
 
-            // Indexes
-            {$this->generateIndexes($table)}
+            $tableDefinitions = [];
 
-            // Foreign keys
-            {$this->generateForeignKeys($table)}
-        });
+            foreach ($table->foreignKeys as $fk) {
+                $line = "\$table->foreign('{$fk->column}')";
+                $line .= "->references('{$fk->referencedColumn}')";
+                $line .= "->on('{$fk->referencedTable}')";
+
+                if ($fk->onDelete !== null) {
+                    $line .= "->onDelete('{$fk->onDelete}')";
+                }
+
+                if ($fk->onUpdate !== null) {
+                    $line .= "->onUpdate('{$fk->onUpdate}')";
+                }
+
+                $line .= ';';
+                $tableDefinitions[] = "            {$line}";
+            }
+
+            $definitions[] = "        Schema::table('{$table->name}', function (Blueprint \$table) {\n"
+                .implode("\n", $tableDefinitions)."\n"
+                .'        });';
+
+            $fkColumns = array_map(fn (ForeignKey $fk) => "'{$fk->column}'", $table->foreignKeys);
+            $columnsArray = '['.implode(', ', $fkColumns).']';
+
+            $drops[] = "        Schema::table('{$table->name}', function (Blueprint \$table) {\n"
+                ."            \$table->dropForeign({$columnsArray});\n"
+                .'        });';
+        }
+
+        if (empty($definitions)) {
+            return null;
+        }
+
+        $stub = file_get_contents($this->fkStubPath);
+
+        return str_replace(
+            ['{{FOREIGN_KEY_DEFINITIONS}}', '{{FOREIGN_KEY_DROPS}}'],
+            [implode("\n\n", $definitions), implode("\n\n", $drops)],
+            $stub,
+        );
     }
 
     /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::dropIfExists('{$tableName}');
-    }
-};
-PHP;
-
-        return $code;
-    }
-
-    /**
-     * Generate column definitions
+     * Generate column definitions.
      */
     protected function generateColumns(Table $table): string
     {
         $lines = [];
-        
+
         foreach ($table->columns as $column) {
             $definition = $this->getColumnDefinition($column);
-            if ($definition) {
-                $lines[] = "            {$definition},";
+
+            if ($definition !== null) {
+                $lines[] = "            {$definition};";
             }
         }
-        
+
         return implode("\n", $lines);
     }
 
     /**
-     * Get the primary key column name
+     * Generate primary key definition.
      */
-    protected function getPrimaryKeyColumn(Table $table): string
+    protected function generatePrimaryKey(Table $table): string
     {
-        // Default to 'id' or first column
-        if ($table->getColumn('id')) {
-            return 'id';
+        // Check if there's an explicit primary key index
+        foreach ($table->indexes as $index) {
+            if ($index->type === 'primary') {
+                if (count($index->columns) === 1 && $index->columns[0] === 'id') {
+                    // id() already handles primary key
+                    return '';
+                }
+
+                $cols = array_map(fn ($c) => "'{$c}'", $index->columns);
+
+                return '            $table->primary(['.implode(', ', $cols).']);';
+            }
         }
-        
-        if (! empty($table->columns)) {
-            return $table->columns[0]->name;
-        }
-        
-        return 'id'; // fallback
+
+        return '';
     }
 
     /**
-     * Generate index definitions
+     * Generate index definitions (excluding primary key).
      */
     protected function generateIndexes(Table $table): string
     {
         $lines = [];
-        
+
         foreach ($table->indexes as $index) {
-            // Skip primary key (handled separately)
             if ($index->type === 'primary') {
                 continue;
             }
-            
-            $columns = implode(', ', $index->columns);
-            
-            if ($index->type === 'unique') {
-                $lines[] = "            \$table->unique({$columns});";
-            } elseif ($index->type === 'index') {
-                $lines[] = "            \$table->index({$columns});";
-            } elseif ($index->type === 'fulltext') {
-                $lines[] = "            \$table->fullText({$columns});";
-            }
+
+            $cols = array_map(fn ($c) => "'{$c}'", $index->columns);
+            $columnsArg = count($cols) === 1 ? $cols[0] : '['.implode(', ', $cols).']';
+
+            $line = match ($index->type) {
+                'unique' => "\$table->unique({$columnsArg});",
+                'fulltext' => "\$table->fullText({$columnsArg});",
+                default => "\$table->index({$columnsArg});",
+            };
+
+            $lines[] = "            {$line}";
         }
-        
+
         return implode("\n", $lines);
     }
 
     /**
-     * Generate foreign key definitions
+     * Build an enum/set column definition.
+     *
+     * Falls back to string() when no allowed values are known, because
+     * `enum('col', [])` renders as `ENUM()`, which is invalid SQL.
      */
-    protected function generateForeignKeys(Table $table): string
+    protected function getEnumDefinition(Column $column): string
     {
-        $lines = [];
-        
-        foreach ($table->foreignKeys as $fk) {
-            $column = $fk->column;
-            $foreign = $fk->referencedColumn;
-            $onTable = $fk->referencedTable;
-            
-            $onDelete = $fk->onDelete ? ", '{$fk->onDelete}'" : '';
-            $onUpdate = $fk->onUpdate ? ", '{$fk->onUpdate}'" : '';
-            
-            $lines[] = "            \$table->foreign({$column})->references({$foreign})->on({$onTable}){$onDelete}{$onUpdate};";
+        $name = $column->name;
+
+        if ($column->allowedValues === []) {
+            return "\$table->string('{$name}')";
         }
-        
-        return implode("\n", $lines);
+
+        $values = array_map(
+            fn (string $v) => "'".str_replace("'", "\\'", $v)."'",
+            $column->allowedValues,
+        );
+
+        $method = $column->type === 'set' ? 'set' : 'enum';
+
+        return "\$table->{$method}('{$name}', [".implode(', ', $values).'])';
     }
 
     /**
-     * Get column definition from Column object
+     * Get Laravel migration column definition from a Column object.
      */
-    protected function getColumnDefinition(\MigrationSquash\Schema\Column $column): ?string
+    protected function getColumnDefinition(Column $column): ?string
     {
         $name = $column->name;
         $type = $column->type;
-        
-        // Map Laravel types
-        $definition = match ($type) {
-            'bigint', 'int', 'integer', 'smallint', 'mediumint', 'tinyint' => "\$table->{$type}(\'{$name}\')",
-            'decimal' => "\$table->decimal(\'{$name}\', {$column->length})",
-            'float' => "\$table->float(\'{$name}\')",
-            'double' => "\$table->double(\'{$name}\')",
-            'boolean' => "\$table->boolean(\'{$name}\')",
-            'enum' => "\$table->enum(\'{$name}\', [])", // Need enum values
-            default => "\$table->string(\'{$name}\')",
-        };
-        
-        // Add modifiers
-        if ($column->unsigned) {
-            $definition .= '->unsigned()';
+
+        // Handle auto-incrementing id columns specially
+        if ($column->autoIncrement) {
+            $idMethod = match ($type) {
+                'bigint' => 'id',
+                'integer', 'int' => 'increments',
+                'smallint' => 'smallIncrements',
+                'mediumint' => 'mediumIncrements',
+                'tinyint' => 'tinyIncrements',
+                default => 'id',
+            };
+
+            if ($idMethod === 'id') {
+                return $name === 'id' ? '$table->id()' : "\$table->id('{$name}')";
+            }
+
+            return "\$table->{$idMethod}('{$name}')";
         }
-        
+
+        // Map type to Laravel method
+        $definition = match ($type) {
+            'bigint' => $column->unsigned ? "\$table->unsignedBigInteger('{$name}')" : "\$table->bigInteger('{$name}')",
+            'integer', 'int' => $column->unsigned ? "\$table->unsignedInteger('{$name}')" : "\$table->integer('{$name}')",
+            'smallint' => $column->unsigned ? "\$table->unsignedSmallInteger('{$name}')" : "\$table->smallInteger('{$name}')",
+            'mediumint' => $column->unsigned ? "\$table->unsignedMediumInteger('{$name}')" : "\$table->mediumInteger('{$name}')",
+            'tinyint' => $column->unsigned ? "\$table->unsignedTinyInteger('{$name}')" : "\$table->tinyInteger('{$name}')",
+            'decimal' => "\$table->decimal('{$name}'".($column->length ? ", {$column->length}" : '').')',
+            'float' => "\$table->float('{$name}')",
+            'double' => "\$table->double('{$name}')",
+            'boolean', 'bool' => "\$table->boolean('{$name}')",
+            'varchar' => "\$table->string('{$name}'".($column->length ? ", {$column->length}" : '').')',
+            'char' => "\$table->char('{$name}'".($column->length ? ", {$column->length}" : '').')',
+            'text' => "\$table->text('{$name}')",
+            'mediumtext' => "\$table->mediumText('{$name}')",
+            'longtext' => "\$table->longText('{$name}')",
+            'tinytext' => "\$table->tinyText('{$name}')",
+            'blob' => "\$table->binary('{$name}')",
+            'date' => "\$table->date('{$name}')",
+            'datetime' => "\$table->dateTime('{$name}')",
+            'timestamp' => "\$table->timestamp('{$name}')",
+            'time' => "\$table->time('{$name}')",
+            'year' => "\$table->year('{$name}')",
+            'json' => "\$table->json('{$name}')",
+            'enum', 'set' => $this->getEnumDefinition($column),
+            'binary', 'varbinary' => "\$table->binary('{$name}')",
+            default => "\$table->string('{$name}')",
+        };
+
+        // Add modifiers (unsigned already handled in match above for int types)
         if ($column->nullable) {
             $definition .= '->nullable()';
         }
-        
-        if ($column->autoIncrement) {
-            $definition .= '->autoIncrement()';
-        }
-        
-        if ($column->default !== null) {
-            $defaultValue = var_export($column->default, true);
-            $definition .= "->default({$defaultValue})";
-        }
-        
-        if ($column->collation) {
-            $definition .= "->collation('{\$column->collation}')";
-        }
-        
-        return $definition;
-    }
 
-    /**
-     * Generate timestamp based on current time
-     */
-    protected function generateTimestamp(): string
-    {
-        return date('Y_m_d_His');
+        if ($column->default !== null) {
+            if (is_string($column->default) && strtoupper($column->default) === 'CURRENT_TIMESTAMP') {
+                $definition .= '->useCurrent()';
+            } else {
+                $defaultValue = var_export($column->default, true);
+                $definition .= "->default({$defaultValue})";
+            }
+        }
+
+        if ($column->collation !== null) {
+            $definition .= "->collation('{$column->collation}')";
+        }
+
+        return $definition;
     }
 }

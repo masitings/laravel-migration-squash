@@ -8,11 +8,11 @@ class RawSqlDetector
 
     public function __construct(?FileChecker $fileChecker = null)
     {
-        $this->fileChecker = $fileChecker ?? new FileChecker();
+        $this->fileChecker = $fileChecker ?? new FileChecker;
     }
 
     /**
-     * @param array<string> $migrationFiles
+     * @param  array<string>  $migrationFiles
      * @return array<string, string> List of file => reason pairs that should be rejected
      */
     public function detect(array $migrationFiles): array
@@ -22,9 +22,9 @@ class RawSqlDetector
         foreach ($migrationFiles as $file) {
             try {
                 $result = $this->fileChecker->scanMigration($file);
-                
+
                 if (! empty($result['rawSql'])) {
-                    $statements = implode(", ", array_column($result['rawSql'], 'statement'));
+                    $statements = implode(', ', array_column($result['rawSql'], 'statement'));
                     $rejected[$file] = "Contains raw SQL: {$statements}";
                 }
             } catch (\Throwable $e) {

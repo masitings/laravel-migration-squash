@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
@@ -14,12 +15,12 @@ return new class extends Migration {
         Schema::table('users', function (Blueprint $table) {
             $table->string('avatar')->nullable()->after('name');
         });
-        
+
         // Change column type
         Schema::table('posts', function (Blueprint $table) {
             $table->text('excerpt')->nullable()->after('title');
         });
-        
+
         // Add index
         Schema::table('posts', function (Blueprint $table) {
             $table->index('status');
@@ -37,7 +38,7 @@ return new class extends Migration {
             $table->dropIndex(['created_at', 'updated_at']);
             $table->dropColumn('excerpt');
         });
-        
+
         Schema::table('users', function (Blueprint $table) {
             $table->dropColumn('avatar');
         });

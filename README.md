@@ -1,450 +1,178 @@
 # Laravel Migration Squash
 
-[![Latest Stable Version](https://poser.pugx.org/masitings/laravel-migration-squash/v)](https://packagist.org/packages/masitings/laravel-migration-squash)
-[![License](https://poser.pugx.org/masitings/laravel-migration-squash/license)](https://packagist.org/packages/masitings/laravel-migration-squash)
-[![PHP Version Require](https://poser.pugx.org/masitings/laravel-migration-squash/require/php)](https://packagist.org/packages/masitings/laravel-migration-squash)
-[![Total Downloads](https://poser.pugx.org/masitings/laravel-migration-squash/downloads)](https://packagist.org/packages/masitings/laravel-migration-squash/stats)
+[![Tests](https://github.com/masitings/laravel-migration-squash/actions/workflows/tests.yml/badge.svg)](https://github.com/masitings/laravel-migration-squash/actions/workflows/tests.yml)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/masitings/laravel-migration-squash.svg)](https://packagist.org/packages/masitings/laravel-migration-squash)
+[![PHP Version](https://img.shields.io/packagist/php-v/masitings/laravel-migration-squash.svg)](https://packagist.org/packages/masitings/laravel-migration-squash)
+[![License](https://img.shields.io/packagist/l/masitings/laravel-migration-squash.svg)](LICENSE)
 
-Combine multiple old Laravel migration files into one clean consolidated migration file per table, with automatic verification that the final schema is identical to the schema produced by running all original migrations in sequence.
+Combine multiple Laravel migration files into a single consolidated migration per table, with automated schema verification to ensure nothing is lost.
 
-## ✨ Features
+> ⚠️ **v1.0.0 is non-functional and should not be used.** Please use v1.1.0 or later.
 
-- **🚀 Auto-generate** - Create one migration file per table from a long migration history
-- **✅ Schema Verification** - Automatically verify before any changes, ensure schema identity
-- **🛡️ Guard System** - Automatically detect raw SQL and data seeding that cannot be squashed
-- **⚡ High Performance** - Uses SQLite in-memory sandbox for maximum speed
-- **🔄 Circular FK Support** - Automatically handle foreign key circular dependencies
-- **🗂️ Smart Archiving** - Safely archive old migrations to timestamped folders
-- **✅ Actively Tested** - 12 automated tests with 78%+ code coverage
+## How It Works
 
-## 📋 Requirements
+1. **Scan** — discovers all migration files in `database/migrations/`
+2. **Guard** — detects migrations with raw SQL or data seeding and excludes them
+3. **Sandbox** — runs your migrations in an isolated SQLite in-memory database (never touches your real database)
+4. **Introspect** — reads the resulting schema (tables, columns, indexes, foreign keys)
+5. **Generate** — creates one clean migration per table, plus a separate FK migration
+6. **Verify** — runs the generated migrations and compares the schema to ensure they match
+7. **Archive** — moves original migrations to an archive directory with a manifest for rollback
 
-- PHP ^8.1
-- Laravel ^10.0 | ^11.0 | ^12.0 | ^13.0
-- Composer
+## Requirements
 
-## 🚀 Installation
+- PHP 8.1+
+- Laravel 10, 11, 12, or 13
 
-Install via Composer:
-
-```bash
-composer require masitings/laravel-migration-squash --dev
-```
-
-Package akan ter-install dan command artisan akan tersedia secara otomatis.
-
-## 📖 Usage
-
-### Basic Usage
-
-Combine all migrations in a single command:
+## Installation
 
 ```bash
-php artisan migrate:squash
+composer require masitings/laravel-migration-squash
 ```
 
-This command will:
-1. Scan all migrations in `database/migrations/`
-2. Group by table based on Schema operations
-3. Run original migrations in sandbox database
-4. Introspect final schema
-5. Generate consolidated migration files
-6. Verify that schema matches
-7. Ask for confirmation before archiving old migrations
+The service provider is auto-discovered. To publish the config:
 
-### Dry Run Mode
+```bash
+php artisan vendor:publish --tag=migrationsquash-config
+```
 
-Generate and verify without archiving anything:
+## Usage
+
+### Dry Run (recommended first)
 
 ```bash
 php artisan migrate:squash --dry-run
 ```
 
-Very useful for reviewing generated migrations before making changes.
+Generates and verifies squashed migrations without modifying any files.
+
+### Full Squash
+
+```bash
+php artisan migrate:squash
+```
+
+Generates squashed migrations, verifies them, and archives the originals.
 
 ### Check Mode
 
-Only check problematic migrations (raw SQL, data seeding):
-
 ```bash
 php artisan migrate:squash --check
 ```
 
-Output will show which migrations have issues that must be handled manually.
+Only checks for migrations that contain raw SQL or data seeding — does not squash.
 
-### Force Specific Driver
+### Options
 
-Use MySQL sandbox instead of default SQLite:
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Generate and verify without archiving |
+| `--check` | Only check for guarded migrations |
+| `--driver=sqlite` | Force sandbox driver (`sqlite` or `mysql`) |
+| `--table=users` | Squash only specific tables (repeatable) |
 
-```bash
-php artisan migrate:squash --driver=mysql
-```
+## Safety Features
 
-Auto-detect requirement: Package will automatically switch to MySQL if there are MySQL-specific features (enum, geometry, etc.).
+### Sandbox Isolation
 
-### Filter by Table
+All migration execution happens in an isolated sandbox connection (`squash-sandbox-*`). A runtime guard verifies the connection name prefix before any write operation. Your real database is never touched.
 
-Squash only specific tables:
+### Schema Verification
 
-```bash
-php artisan migrate:squash --table=users --table=posts --table=orders
-```
+After generating squashed migrations, the package runs them in a fresh sandbox and compares the resulting schema against the original. If any differences are found, the squash is aborted.
 
-Can repeat `--table` option for multiple tables.
+### Guard System
 
-### Full Command Options
+Migrations containing `DB::statement()`, `DB::unprepared()`, `DB::table()->insert()`, `->update()`, or `->delete()` are automatically detected and excluded from the squash. They are reported but do not cause the entire process to fail.
 
-```bash
-php artisan migrate:squash [options]
+### Archive Manifest
 
-Options:
-      --dry-run            Generate and verify without archiving old migrations
-      --check              Only check for guarded migrations, don't run squash  
-      --table[=TABLE]      Squash only specific tables (can be repeated)
-      --driver=mysql|sqlite  Force sandbox database driver
-  -h, --help               Display help information
-      --verbose            Increase verbosity (multiple times)
-```
+Before archiving, an `archive-manifest.json` is written containing the original file list, hashes, and timestamps for rollback safety.
 
-## 🎯 Example Output
+## Foreign Key Handling
 
-```
-🔍 Laravel Migration Squasher
+Foreign keys are generated in a separate migration file (`*_add_foreign_keys.php`) that runs after all table creation migrations. This eliminates circular dependency issues without needing topological sort.
 
-📂 Step 1: Scanning migrations...
-   Found 523 migration files
-
-🧪 Step 2: Setting up sandbox connection...
-   Using SQLite in-memory sandbox for speed
-
-⚡ Step 3: Running original migrations in sandbox...
-✅ Original migrations executed successfully
-
-📋 Step 4: Introspecting schema...
-   Discovered 47 tables
-
-🏗️ Step 5: Generating squashed migrations...
-   Generated: 2024_12_15_123456_create_users_table.php
-   Generated: 2024_12_15_123456_create_posts_table.php
-   Generated: 2024_12_15_123456_create_orders_table.php
-   ...
-
-✓ Step 6: Verifying generated schema...
-✅ Schema verification passed!
-
-📊 Summary:
-   • 523 original migration files
-   • 47 consolidated files
-   • ~90% reduction in migration count
-
-The following migrations will be archived:
-   Archive location: database/migrations/archive/2024_12_15_123456
-   Files to archive: 523
-   
-Continue? [y/N] y
-
-✨ Migrations archived successfully!
-You can now clean your migration history using:
-  php artisan migrate:fresh
-```
-
-## ⚠️ Important Safety Notes
-
-### What it DOES do:
-- ✅ Generate clean, consolidated migration files
-- ✅ Verify schema accuracy before any changes
-- ✅ Archive old migrations safely (with confirmation)
-- ✅ Work on fresh environments (CI, staging, local)
-
-### What it does NOT do:
-- ❌ Never touches production database
-- ❌ Doesn't run on existing live databases
-- ❌ Can't handle migrations with raw SQL or data seeding (v1)
-- ❌ Won't modify data in any database
-
-### Safe Usage Workflow:
-
-```bash
-# ALWAYS test on staging/local first!
-
-# 1. Check mode - see if there are issues
-php artisan migrate:squash --check
-
-# 2. Dry run - review generated migrations
-php artisan migrate:squash --dry-run
-
-# 3. Review output files manually
-ls -lah database/migrations/*.php
-
-# 4. If satisfied, proceed to full squash
-php artisan migrate:squash
-
-# 5. Verify everything works
-php artisan migrate:fresh
-```
-
-## 🛠️ Configuration
-
-Publish configuration file:
-
-```bash
-php artisan vendor:publish --provider="MigrationSquash\MigrationSquashServiceProvider" --tag="migrationsquash-config"
-```
-
-This creates `config/migrationsquash.php` with options:
+## Configuration
 
 ```php
+// config/migrationsquash.php
+
 return [
     'sandbox' => [
         'driver' => env('MIGRATION_SQUASH_DRIVER', 'sqlite'),
-        // MySQL settings for sandbox...
     ],
-    
+
     'guards' => [
         'block_raw_sql' => true,
         'block_data_seeding' => true,
-        'warn_on_detection' => false,
     ],
-    
+
     'archiving' => [
-        'archive_directory' => 'database/migrations/archive',
-        'retention_days' => 365,
+        'archive_directory' => 'database/migrations-archive',
     ],
-    
+
     'verification' => [
         'strict_mode' => true,
+        'ignore_differences' => [],
     ],
 ];
 ```
 
-## 📁 Generated File Structure
+## Supported Databases
 
-After running `migrate:squash`:
+| Driver | Status |
+|--------|--------|
+| SQLite | ✅ Full support, covered by the test suite (default sandbox) |
+| MySQL | ✅ Supported, covered end-to-end by the test suite |
+| PostgreSQL | 🔜 Planned for v1.2.0 |
+| SQL Server | 🔜 Planned for v1.2.0 |
 
-```
-database/
-├── migrations/
-│   ├── 2024_12_15_123456_create_users_table.php         # Consolidated
-│   ├── 2024_12_15_123457_create_posts_table.php         # Consolidated
-│   ├── 2024_12_15_123458_create_orders_table.php         # Consolidated
-│   └── archive/                                          # Old migrations
-│       ├── 2024_12_15_123456/                            # Timestamped folder
-│       │   ├── 2014_01_01_000000_create_users.php
-│       │   ├── 2014_02_01_000000_add_name_to_users.php
-│       │   └── ... (all old migrations here)
-```
+The MySQL sandbox creates and drops a temporary `laravel_squash_*` database,
+so the configured MySQL user needs `CREATE DATABASE` privileges. Teardown will
+only ever drop a database whose name carries that prefix.
 
-Each consolidated migration looks like:
-
-```php
-<?php
-
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            $table->rememberToken();
-            $table->timestamps();
-            
-            $table->primary('id');
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('users');
-    }
-};
-```
-
-## 🧪 Testing
-
-Run tests:
+## Testing
 
 ```bash
-vendor/bin/pest tests/Feature/MigrationSquashTest.php
+composer install
+composer test
 ```
 
-Or run all tests:
+58 tests, 154 assertions, 79.1% line coverage.
+
+The six MySQL tests skip themselves unless a MySQL server is reachable, so the
+suite is green on a machine that only has SQLite. Point them at a server to run
+them:
 
 ```bash
-vendor/bin/pest
+DB_HOST=127.0.0.1 DB_USERNAME=root DB_PASSWORD= composer test
 ```
 
-### Test Coverage
-
-Current status (v1.0.0):
-
-- ✅ Schema identity after squash  
-- ✅ Raw SQL detection - Fully implemented with 7 automated tests
-- ✅ Circular foreign key handling  
-- ✅ Table filtering via `--table` option - Fully implemented with 5 automated tests
-- ✅ Migration file modifications (column additions, type changes, indexes)
-
-**Recent Test Results**:
-
-```
-$ vendor/bin/pest --parallel
-Pest 5.1.0 · Laravel 13.x
-
-.........✅ 12 tests passed (28 assertions)
-⏱️ Duration: 2.8s
-  
-Code coverage report:
- - Lines: 78.5% (145/185)
- - Branches: 72.1% (98/136)
- - Functions: 81.3% (39/48)
-```
-
-View latest test run: [CI Dashboard](https://github.com/masitings/laravel-migration-squash/actions)
-
-
-### Test Directory Structure
-
-```
-tests/
-├── Feature/
-│   ├── Guards/
-│   │   └── RawSqlDetectorTest.php       ✅ 7 tests (Complete)
-│   └── Console/
-│       └── TableFilterTest.php         ✅ 5 tests (Complete)
-└── Fixtures/
-    └── raw-sql/                         ✅ 6 examples
-    └── table-filter/                    ✅ 4-table FK structure
-```
-
-Legend:
-- ✅ = Fully implemented and tested
-- ⚠️ = In progress / needs additional fixtures
-- 🔴 = Not yet implemented
-Expected successful run shows 5 tests passing with full schema verification coverage.
-
-## 🏗️ Architecture
-
-```
-src/MigrationSquash/
-├── Console/Commands/
-│   └── MigrateSquashCommand.php      # Entry point CLI
-├── Discovery/
-│   ├── MigrationScanner.php          # Parse & scan migrations
-│   └── TableGrouping.php             # Group by table + resolve deps
-├── Guards/
-│   ├── RawSqlDetector.php            # Detect DB::statement()
-│   ├── DataSeedDetector.php          # Detect insert/update/delete
-│   └── FileChecker.php               # AST parser for security
-├── Sandbox/
-│   ├── SandboxConnectionFactory.php  # Create temp SQLite/MySQL
-│   └── SandboxRunner.php             # Run migrations isolated
-├── Introspection/
-│   ├── SchemaIntrospector.php        # Read INFORMATION_SCHEMA
-│   └── Schema/
-│       ├── Column.php                # Column model
-│       ├── Table.php                 # Table model
-│       ├── Index.php                 # Index model
-│       └── ForeignKey.php            # Foreign key model
-├── Generation/
-│   ├── SquashedMigrationGenerator.php # Generate code
-│   └── Stubs/squashed-table.stub     # Template file
-├── Verification/
-│   ├── SchemaComparator.php          # Compare schemas semantically
-│   └── SchemaDiff.php                # Diff results/report
-└── Archiving/
-    └── MigrationArchiver.php         # Move files to archive dir
-```
-
-## 🔍 How It Works
-
-```mermaid
-graph TD
-    A[Scan All Migrations] --> B{Check Guards}
-    B -->|Raw SQL found| C[Report & Exclude]
-    B -->|Clean Migrations| D[Setup Sandbox]
-    D --> E[Run Original Migrations]
-    E --> F[Introspect Schema BEFORE]
-    F --> G[Generate Consolidated]
-    G --> H[Run Generated in Fresh Sandbox]
-    H --> I[Introspect Schema AFTER]
-    I --> J{Compare Schemas}
-    J -->|Match| K[Success - Offer Archive]
-    J -->|Mismatch| L[Abort - Show Diff]
-    K --> M{Archive Confirmed?}
-    M -->|Yes| N[Move to Archive]
-    M -->|No| O[Done - No Changes]
-    L --> P[End - No Changes]
-    N --> Q[Ready for Fresh Start]
-```
-
-## 🐛 Troubleshooting
-
-### Issue: "SQLite not installed"
-**Solution:** Install pdo_sqlite extension or use `--driver=mysql`
+Coverage needs pcov or xdebug installed:
 
 ```bash
-php artisan migrate:squash --driver=mysql
+composer test:coverage   # fails below 70%
 ```
 
-### Issue: "Schema mismatch detected"
-**Solutions:**
-1. Review the detailed diff output from command
-2. Check for custom types or features that weren't captured
-3. Consider migrating those tables separately with manual migrations
-
-### Issue: "Too many migrations to process at once"
-**Solution:** Use `--table` filter to process in batches:
+Code style is enforced with Pint:
 
 ```bash
-php artisan migrate:squash --table=users
-php artisan migrate:squash --table=posts
-php artisan migrate:squash --table=orders
+composer lint       # check
+composer lint:fix   # fix
 ```
 
-### Issue: "Guard rejected some migrations"
-**Solution:** 
-- Review which migrations contain raw SQL or data seeding
-- These must be handled manually
-- Consider extracting them from main migration files
+CI runs the suite across PHP 8.1 to 8.4 and Laravel 10 to 12, with a MySQL 8.0
+service so the MySQL path is exercised on every push.
 
-## 📚 Documentation
+## Changelog
 
-- **Technical Spec**: [`docs/Laravel_Migration_Squasher.md`](../docs/Laravel_Migration_Squasher.md)
-- **Setup Guide**: [`packages/README.md`](../../packages/README.md)
-- **Implementation**: [`IMPLEMENTATION_SUMMARY.md`](../../IMPLEMENTATION_SUMMARY.md)
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
-## 🤝 Contributing
+## License
 
-Contributions welcome! Please follow these steps:
+MIT License. See [LICENSE](LICENSE) for details.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Write/add tests
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+## Author
 
-## 📄 License
-
-This package is open-source software licensed under the [MIT license](LICENSE).
-
-## 👤 Author
-
-**Rafi Bagaskara Halilintar**
-- Website: https://masiting.dev
-- Email: hallo@masiting.dev
-- GitHub: https://github.com/masitings
-
----
-
-Built with ❤️ for cleaner Laravel migrations
-
-**Questions?** Open an issue at https://github.com/masitings/laravel-migration-squash/issues
+[Rafi Bagaskara Halilintar](https://masiting.dev) — [hallo@masiting.dev](mailto:hallo@masiting.dev)

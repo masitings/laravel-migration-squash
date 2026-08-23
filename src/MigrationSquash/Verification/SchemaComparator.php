@@ -2,103 +2,87 @@
 
 namespace MigrationSquash\Verification;
 
-use MigrationSquash\Schema\Table;
-
 class SchemaComparator
 {
     /**
-     * Compare two schema snapshots for equality
-     * 
-     * @param array<string, mixed> $snapshotBefore Original schema snapshot
-     * @param array<string, mixed> $snapshotAfter Generated schema snapshot
+     * Compare two schema snapshots for equality.
+     *
+     * @param  array{tables: array<string, array<string, mixed>>}  $snapshotBefore  Original schema snapshot
+     * @param  array{tables: array<string, array<string, mixed>>}  $snapshotAfter  Generated schema snapshot
      * @return SchemaDiff Diff report with any differences found
      */
     public function compare(array $snapshotBefore, array $snapshotAfter): SchemaDiff
     {
-        $diff = new SchemaDiff();
-        
+        $diff = new SchemaDiff;
+
         // Check if all tables in before exist in after
         foreach ($snapshotBefore['tables'] as $tableName => $tableData) {
             if (! isset($snapshotAfter['tables'][$tableName])) {
                 $diff->add($tableName, 'table_missing', []);
+
                 continue;
             }
-            
+
             $this->compareTable($tableData, $snapshotAfter['tables'][$tableName], $diff);
         }
-        
+
         // Check for extra tables in after
         foreach ($snapshotAfter['tables'] as $tableName => $tableData) {
             if (! isset($snapshotBefore['tables'][$tableName])) {
                 $diff->add($tableName, 'extra_table', []);
             }
         }
-        
+
         return $diff;
     }
 
     /**
-     * Compare two tables
+     * Compare two tables.
      */
     protected function compareTable(array $before, array $after, SchemaDiff $diff): void
     {
-        // Compare columns
         $this->compareColumns($before, $after, $diff);
-        
-        // Compare indexes
         $this->compareIndexes($before, $after, $diff);
-        
-        // Compare foreign keys
         $this->compareForeignKeys($before, $after, $diff);
     }
 
     /**
-     * Compare columns between two table definitions
+     * Compare columns between two table definitions.
      */
     protected function compareColumns(array $before, array $after, SchemaDiff $diff): void
     {
         $beforeCols = [];
         $afterCols = [];
-        
+
         foreach ($before['columns'] as $col) {
             $beforeCols[$col['name']] = $col;
         }
-        
+
         foreach ($after['columns'] as $col) {
             $afterCols[$col['name']] = $col;
         }
-        
-        // Check for missing columns
+
         foreach ($beforeCols as $name => $col) {
             if (! isset($afterCols[$name])) {
-                $diff->add(
-                    $before['name'],
-                    'column_missing',
-                    ['column' => $name]
-                );
+                $diff->add($before['name'], 'column_missing', ['column' => $name]);
+
                 continue;
             }
-            
-            // Check column attributes
-            $this->compareColumnAttributes($col, $afterCols[$name], $diff);
+
+            $this->compareColumnAttributes($before['name'], $col, $afterCols[$name], $diff);
         }
-        
-        // Check for extra columns
+
         foreach ($afterCols as $name => $col) {
             if (! isset($beforeCols[$name])) {
-                $diff->add(
-                    $before['name'],
-                    'extra_column',
-                    ['column' => $name]
-                );
+                $diff->add($before['name'], 'extra_column', ['column' => $name]);
             }
         }
     }
 
     /**
-     * Compare individual column attributes
+     * Compare individual column attributes.
      */
-    protected function compareColumnAttributes(array $before, array $after, SchemaDiff $diff): void
+    protected function compareColumnAttributes(string $tableName, array $before, array $after, SchemaDiff $diff): void
     {
         $attributes = [
             'type' => 'column_type_mismatch',
@@ -107,130 +91,156 @@ class SchemaComparator
             'unsigned' => 'column_unsigned_mismatch',
             'length' => 'column_length_mismatch',
             'collation' => 'column_collation_mismatch',
+            'allowed_values' => 'column_enum_values_mismatch',
         ];
-        
+
         foreach ($attributes as $attr => $diffType) {
-            if ($before[$attr] !== $after[$attr]) {
-                $diff->add(
-                    $before['name'],
-                    $diffType,
-                    [
-                        'column' => $before['name'],
-                        'expected' => var_export($before[$attr], true),
-                        'actual' => var_export($after[$attr], true),
-                    ]
-                );
+            $beforeVal = $before[$attr] ?? null;
+            $afterVal = $after[$attr] ?? null;
+
+            if ($beforeVal !== $afterVal) {
+                $diff->add($tableName, $diffType, [
+                    'column' => $before['name'],
+                    'expected' => $this->renderValue($beforeVal),
+                    'actual' => $this->renderValue($afterVal),
+                ]);
             }
         }
     }
 
     /**
-     * Compare indexes between two table definitions
+     * Render an attribute value for a human-readable diff message.
+     */
+    protected function renderValue(mixed $value): string
+    {
+        if (is_array($value)) {
+            return '['.implode(', ', array_map(fn ($v) => var_export($v, true), $value)).']';
+        }
+
+        return var_export($value, true);
+    }
+
+    /**
+     * Compare indexes between two table definitions.
+     *
+     * Comparison is based on signature (sorted columns + type) rather than
+     * index name, because generated names differ across drivers.
      */
     protected function compareIndexes(array $before, array $after, SchemaDiff $diff): void
     {
-        $beforeIdxs = [];
-        $afterIdxs = [];
-        
-        foreach ($before['indexes'] as $idx) {
-            if ($idx['type'] !== 'primary') { // Skip primary key (usually handled separately)
-                $beforeIdxs[$idx['name']] = $idx;
+        $beforeSigs = $this->buildIndexSignatures($before['indexes'] ?? []);
+        $afterSigs = $this->buildIndexSignatures($after['indexes'] ?? []);
+
+        foreach ($beforeSigs as $sig => $idx) {
+            if (! isset($afterSigs[$sig])) {
+                $diff->add($before['name'], 'index_missing', [
+                    'columns' => implode(',', $idx['columns']),
+                    'type' => $idx['type'],
+                ]);
             }
         }
-        
-        foreach ($after['indexes'] as $idx) {
-            if ($idx['type'] !== 'primary') {
-                $afterIdxs[$idx['name']] = $idx;
-            }
-        }
-        
-        // Check for missing indexes
-        foreach ($beforeIdxs as $name => $idx) {
-            if (! isset($afterIdxs[$name])) {
-                $diff->add(
-                    $before['name'],
-                    'index_missing',
-                    ['index' => $name]
-                );
-            } elseif ($idx['columns'] !== $afterIdxs[$name]['columns']) {
-                $diff->add(
-                    $before['name'],
-                    'index_columns_mismatch',
-                    [
-                        'index' => $name,
-                        'expected' => implode(',', $idx['columns']),
-                        'actual' => implode(',', $afterIdxs[$name]['columns']),
-                    ]
-                );
-            }
-        }
-        
-        // Check for extra indexes
-        foreach ($afterIdxs as $name => $idx) {
-            if (! isset($beforeIdxs[$name])) {
-                $diff->add(
-                    $before['name'],
-                    'extra_index',
-                    ['index' => $name]
-                );
+
+        foreach ($afterSigs as $sig => $idx) {
+            if (! isset($beforeSigs[$sig])) {
+                $diff->add($before['name'], 'extra_index', [
+                    'columns' => implode(',', $idx['columns']),
+                    'type' => $idx['type'],
+                ]);
             }
         }
     }
 
     /**
-     * Compare foreign keys between two table definitions
+     * Build index signatures for comparison.
+     *
+     * Signature = "type:col1,col2,col3" (columns sorted).
+     *
+     * @return array<string, array{type: string, columns: array<string>}>
+     */
+    protected function buildIndexSignatures(array $indexes): array
+    {
+        $signatures = [];
+
+        foreach ($indexes as $idx) {
+            if (($idx['type'] ?? '') === 'primary') {
+                continue;
+            }
+
+            $cols = $idx['columns'] ?? [];
+            sort($cols);
+            $sig = ($idx['type'] ?? 'index').':'.implode(',', $cols);
+            $signatures[$sig] = $idx;
+        }
+
+        return $signatures;
+    }
+
+    /**
+     * Compare foreign keys between two table definitions.
+     *
+     * Comparison is based on column + referenced_table + referenced_column
+     * rather than FK name, because generated names differ across drivers.
      */
     protected function compareForeignKeys(array $before, array $after, SchemaDiff $diff): void
     {
-        $beforeFks = [];
-        $afterFks = [];
-        
-        foreach ($before['foreign_keys'] as $fk) {
-            $beforeFks[$fk['name']] = $fk;
-        }
-        
-        foreach ($after['foreign_keys'] as $fk) {
-            $afterFks[$fk['name']] = $fk;
-        }
-        
-        // Check for missing foreign keys
-        foreach ($beforeFks as $name => $fk) {
-            if (! isset($afterFks[$name])) {
-                $diff->add(
-                    $before['name'],
-                    'foreign_key_missing',
-                    ['fk' => $name]
-                );
+        $beforeSigs = $this->buildFkSignatures($before['foreign_keys'] ?? []);
+        $afterSigs = $this->buildFkSignatures($after['foreign_keys'] ?? []);
+
+        foreach ($beforeSigs as $sig => $fk) {
+            if (! isset($afterSigs[$sig])) {
+                $diff->add($before['name'], 'foreign_key_missing', [
+                    'column' => $fk['column'],
+                    'referenced_table' => $fk['referenced_table'],
+                ]);
+
                 continue;
             }
-            
-            // Check FK attributes
-            $attrs = ['referenced_table', 'referenced_column', 'on_delete', 'on_update'];
+
+            // Check FK attributes (on_update, on_delete)
+            $attrs = ['on_update', 'on_delete'];
+
             foreach ($attrs as $attr) {
-                if ($fk[$attr] !== $afterFks[$name][$attr]) {
-                    $diff->add(
-                        $before['name'],
-                        'foreign_key_attribute_mismatch',
-                        [
-                            'fk' => $name,
-                            'attribute' => $attr,
-                            'expected' => $fk[$attr],
-                            'actual' => $afterFks[$name][$attr],
-                        ]
-                    );
+                $beforeVal = $fk[$attr] ?? null;
+                $afterVal = $afterSigs[$sig][$attr] ?? null;
+
+                if ($beforeVal !== $afterVal) {
+                    $diff->add($before['name'], 'foreign_key_attribute_mismatch', [
+                        'column' => $fk['column'],
+                        'referenced_table' => $fk['referenced_table'],
+                        'attribute' => $attr,
+                        'expected' => $beforeVal ?? 'null',
+                        'actual' => $afterVal ?? 'null',
+                    ]);
                 }
             }
         }
-        
-        // Check for extra foreign keys
-        foreach ($afterFks as $name => $fk) {
-            if (! isset($beforeFks[$name])) {
-                $diff->add(
-                    $before['name'],
-                    'extra_foreign_key',
-                    ['fk' => $name]
-                );
+
+        foreach ($afterSigs as $sig => $fk) {
+            if (! isset($beforeSigs[$sig])) {
+                $diff->add($before['name'], 'extra_foreign_key', [
+                    'column' => $fk['column'],
+                    'referenced_table' => $fk['referenced_table'],
+                ]);
             }
         }
+    }
+
+    /**
+     * Build FK signatures for comparison.
+     *
+     * Signature = "column->referenced_table.referenced_column"
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    protected function buildFkSignatures(array $foreignKeys): array
+    {
+        $signatures = [];
+
+        foreach ($foreignKeys as $fk) {
+            $sig = ($fk['column'] ?? '').'->'.($fk['referenced_table'] ?? '').'.'.($fk['referenced_column'] ?? '');
+            $signatures[$sig] = $fk;
+        }
+
+        return $signatures;
     }
 }

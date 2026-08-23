@@ -1,0 +1,7 @@
+# Directories and files to exclude from distribution archives
+/.github        export-ignore
+/tests          export-ignore
+/.gitignore     export-ignore
+/.phpunit.cache export-ignore
+/phpunit.xml    export-ignore
+/PRD.md         export-ignore

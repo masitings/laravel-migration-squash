@@ -12,7 +12,11 @@ class MigrationSquashServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Publish configuration if needed
+        $this->mergeConfigFrom(
+            __DIR__.'/../../config/migrationsquash.php',
+            'migrationsquash',
+        );
+
         if ($this->app->runningInConsole()) {
             $this->commands([
                 MigrateSquashCommand::class,
@@ -25,17 +29,14 @@ class MigrationSquashServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Publish stubs
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                __DIR__ . '/Generation/Stubs/squashed-table.stub' => 
-                    base_path('stubs/migration-squash/squashed-table.stub'),
+                __DIR__.'/Generation/Stubs/squashed-table.stub' => base_path('stubs/migration-squash/squashed-table.stub'),
+                __DIR__.'/Generation/Stubs/squashed-foreign-keys.stub' => base_path('stubs/migration-squash/squashed-foreign-keys.stub'),
             ], 'migration-squash-stubs');
-            
-            // Publish config file
+
             $this->publishes([
-                __DIR__ . '/../../config/migrationsquash.php' => 
-                    config_path('migrationsquash.php'),
+                __DIR__.'/../../config/migrationsquash.php' => config_path('migrationsquash.php'),
             ], 'migrationsquash-config');
         }
     }

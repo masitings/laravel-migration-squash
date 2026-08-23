@@ -12,13 +12,15 @@ class Column
         public readonly ?int $length = null,
         public readonly bool $unsigned = false,
         public readonly ?string $collation = null,
-        public readonly ?string $autoIncrement = null,
+        public readonly bool $autoIncrement = false,
         public readonly ?bool $virtual = null,
         public readonly ?bool $computed = null,
+        /** @var array<int, string> Allowed values for enum/set columns */
+        public readonly array $allowedValues = [],
     ) {}
 
     /**
-     * Compare this column with another for equality
+     * Compare this column with another for equality.
      */
     public function equals(Column $other): bool
     {
@@ -31,28 +33,33 @@ class Column
             && $this->collation === $other->collation
             && $this->autoIncrement === $other->autoIncrement
             && $this->virtual === $other->virtual
-            && $this->computed === $other->computed;
+            && $this->computed === $other->computed
+            && $this->allowedValues === $other->allowedValues;
     }
 
     /**
-     * Create a Column instance from database column info
+     * Create a Column instance from a normalized database column info array.
+     *
+     * Expects keys: name, type, nullable (bool), default, length (?int),
+     * unsigned (bool), collation (?string), auto_increment (bool),
+     * allowed_values (array<string>, enum/set only).
+     *
+     * @param  array{name: string, type: string, nullable: bool, default: mixed, length: ?int, unsigned: bool, collation: ?string, auto_increment: bool}  $columnInfo
      */
     public static function fromDb(array $columnInfo): self
     {
         return new self(
             name: $columnInfo['name'] ?? '',
             type: $columnInfo['type'] ?? 'unknown',
-            nullable: ($columnInfo['nullable'] ?? false) === true || 
-                      ($columnInfo['null'] ?? 'YES') === 'YES',
+            nullable: (bool) ($columnInfo['nullable'] ?? false),
             default: $columnInfo['default'] ?? null,
-            length: isset($columnInfo['length']) ? (int)$columnInfo['length'] : null,
-            unsigned: ($columnInfo['unsigned'] ?? false) === true,
+            length: isset($columnInfo['length']) ? (int) $columnInfo['length'] : null,
+            unsigned: (bool) ($columnInfo['unsigned'] ?? false),
             collation: $columnInfo['collation'] ?? null,
-            autoIncrement: isset($columnInfo['auto_increment']) ? 
-                           ($columnInfo['auto_increment'] === true || 
-                            $columnInfo['auto_increment'] === 1) : null,
-            virtual: $columnInfo['extra'] ?? null === 'VIRTUAL' ? true : null,
-            computed: ($columnInfo['extra'] ?? '') === 'ON UPDATE CURRENT_TIMESTAMP',
+            autoIncrement: (bool) ($columnInfo['auto_increment'] ?? false),
+            virtual: isset($columnInfo['extra']) && ($columnInfo['extra'] === 'VIRTUAL') ? true : null,
+            computed: isset($columnInfo['extra']) && ($columnInfo['extra'] === 'ON UPDATE CURRENT_TIMESTAMP'),
+            allowedValues: $columnInfo['allowed_values'] ?? [],
         );
     }
 }

@@ -11,13 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('{{TABLE_NAME}}', function (Blueprint $table) {
-            {{COLUMNS}}
-
-            {{PRIMARY_KEY}}
-
-            {{INDEXES}}
-        });
+        {{FOREIGN_KEY_DEFINITIONS}}
     }
 
     /**
@@ -25,6 +19,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('{{TABLE_NAME}}');
+        {{FOREIGN_KEY_DROPS}}
     }
 };

@@ -1,16 +1,5 @@
-# Build products
 /vendor/
-/build/
-
-# PHP parser cache
-/.php-parser-cache/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
+/node_modules/
+/.phpunit.cache/
+composer.lock
+.env

@@ -28,9 +28,11 @@
         "nikic/php-parser": "^5.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0|^11.0",
+        "laravel/pint": "^1.13",
+        "orchestra/testbench": "^8.0|^9.0|^10.0",
         "pestphp/pest": "^2.0|^3.0",
-        "pestphp/pest-plugin-laravel": "^2.0|^3.0"
+        "pestphp/pest-plugin-laravel": "^2.0|^3.0",
+        "phpunit/phpunit": "^10.0|^11.0"
     },
     "autoload": {
         "psr-4": {
@@ -56,5 +58,17 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "test:coverage": "vendor/bin/pest --coverage --min=70",
+        "lint": "vendor/bin/pint --test",
+        "lint:fix": "vendor/bin/pint"
+    },
+    "scripts-descriptions": {
+        "test": "Run the test suite. MySQL tests skip themselves unless DB_* env vars point at a reachable server.",
+        "test:coverage": "Run the test suite and fail below 70% coverage. Needs pcov or xdebug.",
+        "lint": "Check code style with Pint.",
+        "lint:fix": "Fix code style with Pint."
+    }
 }
