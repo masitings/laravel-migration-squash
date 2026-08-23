@@ -4,6 +4,7 @@ namespace MigrationSquash;
 
 use Illuminate\Support\ServiceProvider;
 use MigrationSquash\Console\Commands\MigrateSquashCommand;
+use MigrationSquash\Console\Commands\MigrateSquashRestoreCommand;
 
 class MigrationSquashServiceProvider extends ServiceProvider
 {
@@ -20,6 +21,7 @@ class MigrationSquashServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 MigrateSquashCommand::class,
+                MigrateSquashRestoreCommand::class,
             ]);
         }
     }

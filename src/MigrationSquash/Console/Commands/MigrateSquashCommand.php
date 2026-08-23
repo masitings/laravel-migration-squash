@@ -214,8 +214,10 @@ class MigrateSquashCommand extends Command
         $rawSqlDetector = new RawSqlDetector;
         $dataSeedDetector = new DataSeedDetector;
 
-        $rawSqlIssues = $rawSqlDetector->detect($migrationFiles);
-        $dataSeedIssues = $dataSeedDetector->detect($migrationFiles);
+        // Check mode is a diagnostic, so it reports regardless of whether the
+        // guards are switched on for the squash itself.
+        $rawSqlIssues = $rawSqlDetector->detectAll($migrationFiles);
+        $dataSeedIssues = $dataSeedDetector->detectAll($migrationFiles);
 
         $allIssues = array_merge($rawSqlIssues, $dataSeedIssues);
 
@@ -223,6 +225,12 @@ class MigrateSquashCommand extends Command
             $this->info('✅ All migrations are safe to squash');
 
             return Command::SUCCESS;
+        }
+
+        foreach ([$rawSqlDetector, $dataSeedDetector] as $detector) {
+            if (! $detector->isEnabled()) {
+                $this->warn('ℹ️ '.class_basename($detector).' is disabled in config; its findings below are informational only.');
+            }
         }
 
         $this->error('❌ Found '.count($allIssues).' migration(s) that cannot be squashed:');
@@ -255,17 +263,35 @@ class MigrateSquashCommand extends Command
         $rawSqlIssues = $rawSqlDetector->detect($migrationFiles);
         $dataSeedIssues = $dataSeedDetector->detect($migrationFiles);
 
-        $this->guardedFiles = array_merge($rawSqlIssues, $dataSeedIssues);
+        $detected = array_merge($rawSqlIssues, $dataSeedIssues);
 
-        if (! empty($this->guardedFiles)) {
-            $this->warn('⚠️ '.count($this->guardedFiles).' migration(s) excluded from squash:');
+        // guards.warn_on_detection: report the findings but still squash them.
+        $warnOnly = (bool) config('migrationsquash.guards.warn_on_detection', false);
 
-            foreach ($this->guardedFiles as $file => $reason) {
+        if (! empty($detected)) {
+            $verb = $warnOnly ? 'flagged but still squashed' : 'excluded from squash';
+            $this->warn('⚠️ '.count($detected)." migration(s) {$verb}:");
+
+            foreach ($detected as $file => $reason) {
                 $this->line('   • '.basename($file).": {$reason}");
+            }
+
+            if ($warnOnly) {
+                $this->line('   guards.warn_on_detection is on, so these are NOT excluded.');
+                $this->line('   Verification still has to pass, so a migration this package');
+                $this->line('   cannot reproduce will fail the run rather than pass silently.');
             }
 
             $this->newLine();
         }
+
+        if ($warnOnly) {
+            $this->guardedFiles = [];
+
+            return $migrationFiles;
+        }
+
+        $this->guardedFiles = $detected;
 
         return array_values(array_diff($migrationFiles, array_keys($this->guardedFiles)));
     }

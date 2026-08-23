@@ -133,10 +133,59 @@ class MigrationArchiver
     }
 
     /**
-     * Get the archive path.
+     * Get the archive path for this run.
      */
     public function getArchivePath(): string
     {
         return $this->archivePath;
+    }
+
+    /**
+     * Get the folder that holds every timestamped archive.
+     */
+    public function getArchiveRoot(): string
+    {
+        return dirname($this->archivePath);
+    }
+
+    /**
+     * List every archive folder, oldest first.
+     *
+     * Folder names are timestamps in Y_m_d_His, so a plain sort is
+     * chronological.
+     *
+     * @return array<int, string>
+     */
+    public function listArchives(): array
+    {
+        $root = $this->getArchiveRoot();
+
+        if (! is_dir($root)) {
+            return [];
+        }
+
+        $archives = array_filter(glob($root.'/*') ?: [], 'is_dir');
+
+        sort($archives);
+
+        return array_values($archives);
+    }
+
+    /**
+     * Read an archive's manifest, or null when it has none.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function readManifest(string $archivePath): ?array
+    {
+        $manifestPath = rtrim($archivePath, '/').'/archive-manifest.json';
+
+        if (! file_exists($manifestPath)) {
+            return null;
+        }
+
+        $decoded = json_decode((string) file_get_contents($manifestPath), true);
+
+        return is_array($decoded) ? $decoded : null;
     }
 }

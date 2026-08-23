@@ -75,6 +75,33 @@ tests rather than only read:
   sandbox teardown.
 - `Column::$allowedValues` and the `column_enum_values_mismatch` diff type.
 
+The three remaining PRD items are now closed:
+
+- **`migrate:squash:restore` (FR-5.4).** Undoes a squash from the manifest the
+  archive step already wrote. Verifies every archived file against its recorded
+  md5 before touching anything and refuses the whole restore if one has been
+  altered, if a manifest entry is missing from the archive, or if a destination
+  already exists (`--force` overrides the last one). Also removes the generated
+  migrations unless `--keep-squashed` is passed. `--list` shows the available
+  archives, `--archive=PATH` picks one.
+- **`toMatchSchema()` (FR-6.4).** A Pest expectation that compares two schemas
+  and, on failure, reports the full `SchemaDiff` message instead of "false is
+  not true". Accepts a snapshot array or a live connection name on either side.
+  A companion `toDifferFromSchema()` asserts the diff types that must be
+  present.
+- **Guards read their config (FR-4.6).** `guards.block_raw_sql` and
+  `guards.block_data_seeding` now actually switch their guard off, and
+  `guards.warn_on_detection` reports findings without excluding the migration.
+  `--check` calls a new `detectAll()` so the diagnostic still reports the truth
+  when a guard is switched off.
+
+### Changed
+
+- `archiving.archive_directory` now defaults to `null`, meaning "next to your
+  migration folder". The previous default resolved through `base_path()` while
+  the fallback used `database_path()`, so the archive landed in the wrong place
+  on an app with a customised database path.
+
 ## [v1.1.0] - 2026-08-24
 
 ### ⚠️ Important Notice
