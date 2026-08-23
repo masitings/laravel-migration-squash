@@ -89,6 +89,11 @@ php artisan migrate:squash:restore --keep-squashed # restore without removing ge
 | `--driver=sqlite` | Force sandbox driver (`sqlite` or `mysql`) |
 | `--table=users` | Squash only specific tables (repeatable) |
 
+`--table` matches on the migration filename, not on the tables a migration
+actually touches. If the resulting set holds a foreign key onto a table left
+outside it, the squash is refused rather than generating a migration that
+references something the set never creates.
+
 `migrate:squash:restore`
 
 | Option | Description |
@@ -184,7 +189,7 @@ composer install
 composer test
 ```
 
-72 tests, 199 assertions, 79.5% line coverage.
+101 tests, 263 assertions, 84.6% line coverage.
 
 The six MySQL tests skip themselves unless a MySQL server is reachable, so the
 suite is green on a machine that only has SQLite. Point them at a server to run

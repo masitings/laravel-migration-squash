@@ -73,10 +73,6 @@ class MigrateSquashCommand extends Command
 
             $migrationFiles = array_column($migrations, 'file');
 
-            // Generated files must sort before every original migration,
-            // including any that guards leave behind.
-            $this->baseTimestamp = $this->resolveBaseTimestamp($migrations);
-
             // Step 2: Check for guarded migrations
             if ($this->option('check')) {
                 return $this->handleCheckMode($migrationFiles);
@@ -92,13 +88,18 @@ class MigrateSquashCommand extends Command
             }
 
             // Step 3: Setup sandbox connection
-            $this->sandboxConnectionName = $this->step3_SetupSandbox();
+            $this->sandboxConnectionName = $this->step3_SetupSandbox($migrationFiles);
 
             // Step 4: Run original migrations in sandbox
             $this->step4_RunOriginalInSandbox($migrationFiles);
 
             // Step 5: Introspect schema
             $snapshotBefore = $this->step5_IntrospectSchema();
+
+            // Step 5b: Refuse to squash a set that depends on tables outside it
+            if (! $this->assertSquashSetIsSelfContained($snapshotBefore)) {
+                return Command::FAILURE;
+            }
 
             // Step 6: Generate squashed migrations
             $generatedMigrations = $this->step6_GenerateSquashedMigrations($snapshotBefore);
@@ -147,6 +148,12 @@ class MigrateSquashCommand extends Command
         }
 
         $this->line('   Found '.count($migrations).' migration files');
+
+        // Compute this from the FULL set, before any filtering. Migrations
+        // that --table or a guard leaves behind keep their original
+        // timestamps, and the generated files have to sort before all of
+        // them, not just before the ones being squashed.
+        $this->baseTimestamp = $this->resolveBaseTimestamp($migrations);
 
         // Filter by specific tables if --table option is provided
         $tablesToSquash = $this->option('table');
@@ -299,9 +306,10 @@ class MigrateSquashCommand extends Command
     /**
      * Step 3: Set up sandbox connection.
      *
+     * @param  array<string>  $migrationFiles
      * @return string Connection name
      */
-    protected function step3_SetupSandbox(): string
+    protected function step3_SetupSandbox(array $migrationFiles): string
     {
         $this->info('🧪 Step 2: Setting up sandbox connection...');
 
@@ -318,6 +326,15 @@ class MigrateSquashCommand extends Command
         } else {
             $connectionName = SandboxConnectionFactory::create('sqlite');
             $this->info('ℹ️ Using SQLite in-memory sandbox');
+
+            // Warn rather than silently switching drivers. A MySQL sandbox
+            // needs a reachable server and CREATE DATABASE rights, so picking
+            // it automatically would fail for people who never asked for it.
+            if (SandboxConnectionFactory::needsMySQL($migrationFiles)) {
+                $this->warn('⚠️ These migrations use MySQL-specific column types (enum, geometry, point, ...).');
+                $this->line('   SQLite approximates some of them, so verification may be less exact.');
+                $this->line('   For a faithful check, re-run with --driver=mysql.');
+            }
         }
 
         $this->line("   Connection name: {$connectionName}");
@@ -361,6 +378,68 @@ class MigrateSquashCommand extends Command
         $this->line('   Discovered '.count($snapshot['tables']).' tables');
 
         return $snapshot;
+    }
+
+    /**
+     * Refuse to continue when a table being squashed holds a foreign key onto
+     * a table that is not part of the squash.
+     *
+     * This happens when `--table` narrows the set, or when a guard excludes
+     * the migration that created the referenced table. The generated foreign
+     * key migration would then point at a table the squashed set never
+     * creates, and whether that works depends entirely on how the leftover
+     * migrations happen to sort. Failing loudly beats a squash that only works
+     * by accident.
+     *
+     * @param  array{tables: array<string, array<string, mixed>>}  $snapshot
+     */
+    protected function assertSquashSetIsSelfContained(array $snapshot): bool
+    {
+        $known = array_keys($snapshot['tables']);
+        $dangling = [];
+
+        foreach ($snapshot['tables'] as $tableName => $tableData) {
+            foreach ($tableData['foreign_keys'] ?? [] as $fk) {
+                $target = $fk['referenced_table'] ?? null;
+
+                if ($target === null || in_array($target, $known, true)) {
+                    continue;
+                }
+
+                $dangling[] = [
+                    'table' => $tableName,
+                    'column' => $fk['column'] ?? '?',
+                    'target' => $target,
+                ];
+            }
+        }
+
+        if (empty($dangling)) {
+            return true;
+        }
+
+        $this->newLine();
+        $this->error('❌ The selected migrations are not self-contained.');
+        $this->line('   These foreign keys point at tables that are not part of this squash:');
+
+        foreach ($dangling as $fk) {
+            $this->line("   • {$fk['table']}.{$fk['column']} → {$fk['target']}");
+        }
+
+        $this->newLine();
+
+        if (! empty($this->option('table'))) {
+            $this->line('   Add the referenced tables to --table, or drop --table to squash everything.');
+        }
+
+        if (! empty($this->guardedFiles)) {
+            $this->line('   A guard excluded the migration that creates the referenced table.');
+            $this->line('   Run `migrate:squash --check` to see which migration and why.');
+        }
+
+        $this->line('   Nothing was written or archived.');
+
+        return false;
     }
 
     /**

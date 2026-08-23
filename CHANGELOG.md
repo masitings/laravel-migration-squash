@@ -74,6 +74,11 @@ tests rather than only read:
 - `SandboxConnectionFactory::SANDBOX_DB_PREFIX` as the guard for MySQL
   sandbox teardown.
 - `Column::$allowedValues` and the `column_enum_values_mismatch` diff type.
+- `tests/Feature/TableFilterTest.php`, `tests/Feature/SchemaShapesTest.php` and
+  `tests/Unit/ValueObjectsTest.php` — 16 further tests covering the `--table`
+  refusal, and round trips for tables with no `id`, composite primary keys,
+  composite unique indexes, self-referencing foreign keys, circular foreign key
+  pairs and column defaults.
 
 The three remaining PRD items are now closed:
 
@@ -94,6 +99,25 @@ The three remaining PRD items are now closed:
   `guards.warn_on_detection` reports findings without excluding the migration.
   `--check` calls a new `detectAll()` so the diagnostic still reports the truth
   when a guard is switched off.
+
+A fourth pass then closed the last known correctness gap and the dead code
+left behind by earlier passes:
+
+- **`--table` could produce a squash that only worked by accident.** Squashing
+  a subset whose foreign keys point at tables outside it generated an FK
+  migration referencing a table the squashed set never creates, exited 0, and
+  archived the originals. Whether the result migrated depended entirely on how
+  the leftover migrations happened to sort. The command now refuses a set that
+  is not self-contained, names the offending foreign keys, and writes nothing.
+  The same check catches a guard excluding the migration that creates a
+  referenced table.
+- **The base timestamp was computed after filtering.** `--table` and the guards
+  leave migrations behind with their original timestamps, so the base has to
+  come from the full scan. It is now resolved before any filtering.
+- **`needsMySQL()` had become dead code** when auto-detection was dropped from
+  the sandbox setup. It now warns when migrations use MySQL-specific column
+  types and suggests `--driver=mysql`, rather than silently switching drivers
+  on someone who has no MySQL server configured.
 
 ### Changed
 
