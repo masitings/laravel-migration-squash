@@ -313,33 +313,79 @@ class MigrateSquashCommand extends Command
     {
         $this->info('🧪 Step 2: Setting up sandbox connection...');
 
-        $forceDriver = $this->option('driver');
+        $appDriver = $this->applicationDriver();
+        $forceDriver = $this->option('driver') ?: config('migrationsquash.sandbox.driver');
 
-        if ($forceDriver !== null) {
-            if (! in_array($forceDriver, ['sqlite', 'mysql'])) {
+        if ($forceDriver !== null && $forceDriver !== '') {
+            if (! in_array($forceDriver, ['sqlite', 'mysql'], true)) {
                 throw new \InvalidArgumentException(
-                    "Invalid --driver value '{$forceDriver}'. Must be 'sqlite' or 'mysql'."
+                    "Invalid sandbox driver '{$forceDriver}'. Must be 'sqlite' or 'mysql'."
                 );
             }
 
-            $connectionName = SandboxConnectionFactory::create($forceDriver);
-        } else {
-            $connectionName = SandboxConnectionFactory::create('sqlite');
-            $this->info('ℹ️ Using SQLite in-memory sandbox');
+            $driver = $forceDriver;
 
-            // Warn rather than silently switching drivers. A MySQL sandbox
-            // needs a reachable server and CREATE DATABASE rights, so picking
-            // it automatically would fail for people who never asked for it.
-            if (SandboxConnectionFactory::needsMySQL($migrationFiles)) {
-                $this->warn('⚠️ These migrations use MySQL-specific column types (enum, geometry, point, ...).');
-                $this->line('   SQLite approximates some of them, so verification may be less exact.');
-                $this->line('   For a faithful check, re-run with --driver=mysql.');
+            if ($driver !== $appDriver) {
+                $this->warn("⚠️ Sandbox driver ({$driver}) does not match your application driver ({$appDriver}).");
+                $this->line('   Verification will prove the generated migrations reproduce your schema');
+                $this->line("   on {$driver}, NOT on {$appDriver}. Column types that only one engine has");
+                $this->line('   (unsigned, bigint, enum) can differ. Only do this deliberately.');
             }
+        } else {
+            // Default to the engine the application actually runs on. Squashing
+            // a MySQL app through a SQLite sandbox produces migrations that were
+            // verified against the wrong engine: SQLite has no unsigned bigint,
+            // so id() comes back as increments() and every foreign key onto it
+            // breaks on MySQL, while verification still reports success.
+            $driver = $this->sandboxDriverFor($appDriver);
+
+            if ($driver === null) {
+                $this->error("❌ No sandbox available for the '{$appDriver}' driver.");
+                $this->line('   Squashing is only sound when the sandbox runs the same engine as');
+                $this->line('   your application. Supported: sqlite, mysql, mariadb.');
+                $this->line('   Override with --driver=sqlite only if you understand the risk.');
+
+                throw new \RuntimeException("Unsupported application driver '{$appDriver}'.");
+            }
+
+            $this->info("ℹ️ Using {$driver} sandbox to match your application driver ({$appDriver})");
         }
+
+        if ($driver === 'sqlite' && SandboxConnectionFactory::needsMySQL($migrationFiles)) {
+            $this->warn('⚠️ These migrations use column types SQLite only approximates (enum, geometry, point, ...).');
+            $this->line('   Verification may be less exact than it looks.');
+        }
+
+        $connectionName = SandboxConnectionFactory::create($driver);
 
         $this->line("   Connection name: {$connectionName}");
 
         return $connectionName;
+    }
+
+    /**
+     * The driver the application itself runs on.
+     */
+    protected function applicationDriver(): string
+    {
+        $default = config('database.default');
+
+        return (string) config("database.connections.{$default}.driver", 'sqlite');
+    }
+
+    /**
+     * Which sandbox engine faithfully reproduces the given application driver?
+     *
+     * Returns null when there is no sound sandbox for it, in which case the
+     * command refuses rather than verifying against the wrong engine.
+     */
+    protected function sandboxDriverFor(string $applicationDriver): ?string
+    {
+        return match ($applicationDriver) {
+            'sqlite' => 'sqlite',
+            'mysql', 'mariadb' => 'mysql',
+            default => null,
+        };
     }
 
     /**

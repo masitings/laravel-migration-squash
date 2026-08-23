@@ -119,8 +119,27 @@ left behind by earlier passes:
   types and suggests `--driver=mysql`, rather than silently switching drivers
   on someone who has no MySQL server configured.
 
+A fifth pass found the most serious defect of all, by testing what the package
+does for a MySQL application rather than only for SQLite:
+
+- **The sandbox ran SQLite regardless of the application's engine, so
+  verification proved the wrong thing.** SQLite has no unsigned bigint.
+  Introspecting a SQLite sandbox reports `$table->id()` as plain `integer`, the
+  generator emits `$table->increments('id')`, and on MySQL that is `int` rather
+  than `bigint unsigned`. Every primary key in the squashed schema changed type,
+  and every foreign key onto one failed with
+  `errno 150 "Foreign key constraint is incorrectly formed"`. The package still
+  printed "Schema verification passed", because it had compared SQLite against
+  SQLite. The sandbox driver is now taken from `database.default`; an
+  application on an engine with no matching sandbox is refused rather than
+  verified against the wrong one, and an explicit `--driver` that disagrees with
+  the application driver prints what the verification will and will not prove.
+
 ### Changed
 
+- `migrationsquash.sandbox.driver` now defaults to `null`, meaning "match the
+  application". It previously defaulted to `sqlite`, which is what made the
+  defect above the default behaviour.
 - `archiving.archive_directory` now defaults to `null`, meaning "next to your
   migration folder". The previous default resolved through `base_path()` while
   the fallback used `database_path()`, so the archive landed in the wrong place

@@ -82,3 +82,34 @@ function normalizeSchemaSnapshot(array|string $value): array
 
     return $value;
 }
+
+/**
+ * Is a MySQL server reachable with the configured credentials?
+ */
+function mysqlAvailable(): bool
+{
+    static $available = null;
+
+    if ($available !== null) {
+        return $available;
+    }
+
+    try {
+        new PDO(
+            sprintf(
+                'mysql:host=%s;port=%s',
+                env('DB_HOST', '127.0.0.1'),
+                env('DB_PORT', '3306'),
+            ),
+            env('DB_USERNAME', 'root'),
+            env('DB_PASSWORD', ''),
+            [PDO::ATTR_TIMEOUT => 3],
+        );
+
+        $available = true;
+    } catch (\Throwable $e) {
+        $available = false;
+    }
+
+    return $available;
+}

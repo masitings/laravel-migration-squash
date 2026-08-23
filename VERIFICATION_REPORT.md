@@ -21,9 +21,9 @@ DB_HOST=127.0.0.1 DB_USERNAME=root DB_PASSWORD= vendor/bin/pest --coverage
 
 | Metric | Value |
 |--------|-------|
-| Tests | 101 passed |
-| Assertions | 263 |
-| Line coverage | 84.6% |
+| Tests | 107 passed |
+| Assertions | 273 |
+| Line coverage | 84.2% |
 | Duration | ~3s |
 
 Verified on PHP 8.4.21, Laravel 12.67.0, orchestra/testbench 10.11.0,
@@ -53,6 +53,7 @@ database to reach.
 | Schema round trip | Tables with no `id`, composite primary keys, composite unique indexes, self-referencing foreign keys, circular foreign key pairs, enums and column defaults all round trip to an empty diff |
 | MySQL | Sandbox database creation and teardown, the prefix guard refusing a non-sandbox database, enum parsing from the raw type, and a full round trip |
 | Generated code | Every generated migration is checked with `php -l` |
+| Engine match | The sandbox driver is asserted to follow `database.default`; an unsupported engine resolves to "refuse", not "fall back to SQLite" |
 | Restore | Hash mismatch, missing manifest entry and existing destination each abort the whole restore |
 
 ## Reproducing the safety claims

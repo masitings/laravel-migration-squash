@@ -12,7 +12,13 @@ return [
     */
 
     'sandbox' => [
-        'driver' => env('MIGRATION_SQUASH_DRIVER', 'sqlite'),
+        // Leave null to match the driver your application actually runs on.
+        //
+        // Do NOT set this to 'sqlite' for a MySQL application. SQLite has no
+        // unsigned bigint, so id() comes back as increments() and every
+        // foreign key onto it breaks on MySQL, while verification still
+        // reports success because it compared SQLite against SQLite.
+        'driver' => env('MIGRATION_SQUASH_DRIVER'),
 
         // If using MySQL, these will be used to create temporary database
         'mysql_host' => env('DB_HOST', '127.0.0.1'),

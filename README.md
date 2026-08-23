@@ -109,6 +109,29 @@ references something the set never creates.
 
 All migration execution happens in an isolated sandbox connection (`squash-sandbox-*`). A runtime guard verifies the connection name prefix before any write operation. Your real database is never touched.
 
+### The Sandbox Matches Your Database Engine
+
+The sandbox runs the same engine your application runs on. This is not a
+performance choice, it is a correctness one.
+
+SQLite has no unsigned bigint. Squash a MySQL app through a SQLite sandbox and
+`$table->id()` comes back as `$table->increments('id')`, turning every primary
+key from `bigint unsigned` into `int`, and every foreign key onto it fails with
+`errno 150`. Verification would still report success, because it compared
+SQLite against SQLite.
+
+So the driver is chosen from `database.default`:
+
+| Your app runs on | Sandbox |
+|------------------|---------|
+| `mysql` / `mariadb` | MySQL (temporary `laravel_squash_*` database) |
+| `sqlite` | SQLite in-memory |
+| anything else | refused, rather than verified against the wrong engine |
+
+`--driver` overrides this. If the override does not match your application
+driver, the command says so and explains what the verification will and will
+not prove.
+
 ### Schema Verification
 
 After generating squashed migrations, the package runs them in a fresh sandbox and compares the resulting schema against the original. If any differences are found, the squash is aborted.
@@ -146,7 +169,9 @@ Foreign keys are generated in a separate migration file (`*_add_foreign_keys.php
 
 return [
     'sandbox' => [
-        'driver' => env('MIGRATION_SQUASH_DRIVER', 'sqlite'),
+        // null follows your application's driver, which is what keeps
+        // verification meaningful. Only override deliberately.
+        'driver' => env('MIGRATION_SQUASH_DRIVER'),
     ],
 
     'guards' => [
@@ -189,7 +214,7 @@ composer install
 composer test
 ```
 
-101 tests, 263 assertions, 84.6% line coverage.
+107 tests, 273 assertions, 84.2% line coverage.
 
 The six MySQL tests skip themselves unless a MySQL server is reachable, so the
 suite is green on a machine that only has SQLite. Point them at a server to run

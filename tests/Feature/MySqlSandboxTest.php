@@ -22,37 +22,6 @@ use MigrationSquash\Schema\Index;
 use MigrationSquash\Schema\Table;
 use MigrationSquash\Verification\SchemaComparator;
 
-/**
- * Is a MySQL server reachable with the configured credentials?
- */
-function mysqlAvailable(): bool
-{
-    static $available = null;
-
-    if ($available !== null) {
-        return $available;
-    }
-
-    try {
-        new PDO(
-            sprintf(
-                'mysql:host=%s;port=%s',
-                env('DB_HOST', '127.0.0.1'),
-                env('DB_PORT', '3306'),
-            ),
-            env('DB_USERNAME', 'root'),
-            env('DB_PASSWORD', ''),
-            [PDO::ATTR_TIMEOUT => 3],
-        );
-
-        $available = true;
-    } catch (Throwable $e) {
-        $available = false;
-    }
-
-    return $available;
-}
-
 beforeEach(function () {
     if (! mysqlAvailable()) {
         $this->markTestSkipped('No MySQL server reachable; set DB_HOST/DB_USERNAME/DB_PASSWORD to run these.');
@@ -89,7 +58,7 @@ test('destroy drops the MySQL sandbox database', function () {
     );
 
     $rows = $pdo->query(
-        'SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '.$pdo->quote($database)
+        "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ".$pdo->quote($database)
     )->fetchAll();
 
     expect($rows)->toBeEmpty();
