@@ -92,6 +92,7 @@ class SchemaComparator
             'length' => 'column_length_mismatch',
             'collation' => 'column_collation_mismatch',
             'allowed_values' => 'column_enum_values_mismatch',
+            'comment' => 'column_comment_mismatch',
         ];
 
         foreach ($attributes as $attr => $diffType) {

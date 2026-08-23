@@ -154,6 +154,26 @@ Each guard can be switched off, or downgraded to a warning, in the config:
 
 `--check` always reports what it finds, whatever these flags say.
 
+### What Verification Compares
+
+Per column: name, type, nullability, default, length, unsigned, collation,
+comment and enum allowed values. Per table: indexes (matched by type and
+column set, not by generated name) and foreign keys (matched by column and
+target, with `onUpdate` / `onDelete` compared).
+
+Every one of these has a test that builds two schemas differing in exactly
+that attribute and asserts the difference is reported, so "verification
+passed" means something.
+
+Not compared: column order (columns are matched by name), check constraints
+other than the one Laravel uses for `enum`, generated and virtual columns,
+table engine and charset, and partial indexes.
+
+One limitation worth knowing: **on SQLite, varchar length is not verifiable.**
+Laravel's SQLite grammar writes `"name" varchar not null` with no length for
+any string size, so nothing downstream can recover it. This does not affect a
+MySQL application, which is introspected on MySQL where length is compared.
+
 ### Archive Manifest
 
 Before archiving, an `archive-manifest.json` is written containing the original file list, hashes, and timestamps. `migrate:squash:restore` reads it to undo a squash, and refuses to restore a file whose hash no longer matches.
@@ -214,7 +234,7 @@ composer install
 composer test
 ```
 
-107 tests, 273 assertions, 84.2% line coverage.
+124 tests, 306 assertions, 85.8% line coverage.
 
 The six MySQL tests skip themselves unless a MySQL server is reachable, so the
 suite is green on a machine that only has SQLite. Point them at a server to run

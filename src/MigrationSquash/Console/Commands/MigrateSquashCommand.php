@@ -562,6 +562,7 @@ class MigrateSquashCommand extends Command
             collation: $col['collation'] ?? null,
             autoIncrement: (bool) ($col['auto_increment'] ?? false),
             allowedValues: $col['allowed_values'] ?? [],
+            comment: $col['comment'] ?? null,
         ), $tableData['columns'] ?? []);
 
         $indexes = array_map(fn ($idx) => new Index(

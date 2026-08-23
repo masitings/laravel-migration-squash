@@ -267,6 +267,10 @@ class SquashedMigrationGenerator
             $definition .= "->collation('{$column->collation}')";
         }
 
+        if ($column->comment !== null) {
+            $definition .= "->comment('".str_replace("'", "\\'", $column->comment)."')";
+        }
+
         return $definition;
     }
 }

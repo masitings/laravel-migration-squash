@@ -57,6 +57,7 @@ class SchemaDiff
                 'column_unsigned_mismatch' => ": {$details['column']} unsigned mismatch (expected {$details['expected']}, got {$details['actual']})",
                 'column_length_mismatch' => ": {$details['column']} length mismatch (expected {$details['expected']}, got {$details['actual']})",
                 'column_collation_mismatch' => ": {$details['column']} collation mismatch (expected {$details['expected']}, got {$details['actual']})",
+                'column_comment_mismatch' => ": {$details['column']} comment mismatch (expected {$details['expected']}, got {$details['actual']})",
                 'column_enum_values_mismatch' => ": {$details['column']} enum values mismatch (expected {$details['expected']}, got {$details['actual']})",
                 'index_missing' => ": Index missing (columns: {$details['columns']})",
                 'extra_index' => ": Extra index (columns: {$details['columns']})",

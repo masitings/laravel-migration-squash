@@ -125,9 +125,15 @@ class SchemaIntrospector
     protected function getMySQLColumns(string $tableName): array
     {
         $connection = DB::connection($this->connectionName);
-        $columns = $connection->select("DESCRIBE `{$tableName}`");
 
-        return array_map(function ($col) {
+        // SHOW FULL COLUMNS rather than DESCRIBE: it is the only form that
+        // returns Collation and Comment, both of which are part of the schema
+        // and were previously never captured or compared.
+        $columns = $connection->select("SHOW FULL COLUMNS FROM `{$tableName}`");
+
+        $defaultCollation = $this->mysqlDefaultCollation();
+
+        return array_map(function ($col) use ($defaultCollation) {
             $rawType = $col->Type;
             $unsigned = str_contains($rawType, 'unsigned');
             $baseType = $this->normalizeType(preg_replace('/\s*unsigned$/i', '', $rawType));
@@ -164,7 +170,13 @@ class SchemaIntrospector
                 'default' => $default,
                 'length' => $length,
                 'unsigned' => $unsigned,
-                'collation' => null,
+                // Only record a collation that differs from the database
+                // default. Recording the default on every column would make
+                // the generated migrations noisy without changing the schema.
+                'collation' => ($col->Collation ?? null) !== null && $col->Collation !== $defaultCollation
+                    ? $col->Collation
+                    : null,
+                'comment' => ($col->Comment ?? '') !== '' ? $col->Comment : null,
                 'auto_increment' => str_contains($col->Extra ?? '', 'auto_increment'),
                 'allowed_values' => $allowedValues,
             ];
@@ -277,8 +289,9 @@ class SchemaIntrospector
         // constraint, so the allowed values only survive in the CREATE TABLE
         // statement. Without this the values are lost on the round trip.
         $enumValues = $this->parseSqliteCheckConstraints($createSql->sql ?? '');
+        $collations = $this->parseSqliteCollations($createSql->sql ?? '');
 
-        return array_map(function ($col) use ($hasAutoIncrement, $enumValues) {
+        return array_map(function ($col) use ($hasAutoIncrement, $enumValues, $collations) {
             $rawType = strtolower($col->type ?? 'text');
             $unsigned = str_contains($rawType, 'unsigned');
             $baseType = $this->normalizeType(preg_replace('/\s*unsigned$/i', '', $rawType));
@@ -326,7 +339,9 @@ class SchemaIntrospector
                 'default' => $default,
                 'length' => $length,
                 'unsigned' => $unsigned,
-                'collation' => null,
+                'collation' => $collations[$col->name] ?? null,
+                // SQLite has no column comments.
+                'comment' => null,
                 'auto_increment' => $isAutoIncrement,
                 'allowed_values' => $allowedValues,
             ];
@@ -456,6 +471,52 @@ class SchemaIntrospector
     }
 
     /**
+     * The database's default collation, used to decide which column
+     * collations are worth recording.
+     */
+    protected function mysqlDefaultCollation(): ?string
+    {
+        try {
+            $row = DB::connection($this->connectionName)->selectOne('SELECT @@collation_database AS c');
+
+            return $row->c ?? null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Parse per-column COLLATE clauses out of a SQLite CREATE TABLE statement.
+     *
+     * PRAGMA table_info does not report collation, so without this a column
+     * declared COLLATE NOCASE would compare equal to one that is not.
+     *
+     * @return array<string, string> Map of column name -> collation
+     */
+    protected function parseSqliteCollations(string $createSql): array
+    {
+        if ($createSql === '') {
+            return [];
+        }
+
+        $result = [];
+        // Laravel renders SQLite collations as: "col" varchar not null collate 'NOCASE'
+        // The collation name can be single-quoted, double-quoted, backticked,
+        // bracketed or bare, so accept all of them.
+        $pattern = '/["`\[]?(\w+)["`\]]?[^,()]*?\bcollate\s+[\'"`\[]?(\w+)[\'"`\]]?/i';
+
+        if (! preg_match_all($pattern, $createSql, $matches, PREG_SET_ORDER)) {
+            return [];
+        }
+
+        foreach ($matches as $match) {
+            $result[$match[1]] = $match[2];
+        }
+
+        return $result;
+    }
+
+    /**
      * Normalize a raw database type to a canonical form.
      *
      * Strips parenthesized length/precision so types like 'bigint(20)' and
@@ -547,6 +608,7 @@ class SchemaIntrospector
                 'length' => $col->length,
                 'unsigned' => $col->unsigned,
                 'collation' => $col->collation,
+                'comment' => $col->comment,
                 'auto_increment' => $col->autoIncrement,
                 'allowed_values' => $col->allowedValues,
             ], $table->columns),

@@ -135,6 +135,32 @@ does for a MySQL application rather than only for SQLite:
   verified against the wrong one, and an explicit `--driver` that disagrees with
   the application driver prints what the verification will and will not prove.
 
+A sixth pass audited what verification actually compares, by building pairs of
+schemas that differ in exactly one attribute and asserting each difference is
+reported:
+
+- **Collation was never compared.** Both introspectors hard coded
+  `'collation' => null`, so every collation compared equal to every other one.
+  MySQL introspection now uses `SHOW FULL COLUMNS` instead of `DESCRIBE`, the
+  only form that returns `Collation`, and SQLite collations are parsed out of
+  the `CREATE TABLE` statement. Only collations that differ from the database
+  default are recorded, so generated migrations stay readable.
+- **Column comments were never captured.** `SHOW FULL COLUMNS` returns them
+  too; they are now carried through the snapshot, emitted by the generator and
+  compared.
+- The first version of the SQLite collation parser silently found nothing,
+  because Laravel writes `collate 'NOCASE'` with single quotes, which the
+  pattern did not accept. Caught by the audit rather than shipped.
+
+### Known limitation, recorded rather than hidden
+
+- **On SQLite, varchar length is not verifiable.** Laravel's SQLite grammar
+  emits `"name" varchar not null` with no length for any string size, so
+  `string('name', 100)` and `string('name', 200)` produce the same schema.
+  This is a property of SQLite. It does not affect a MySQL application, which
+  is now introspected on MySQL where length is compared. There is a test
+  asserting this behaviour so it stays visible.
+
 ### Changed
 
 - `migrationsquash.sandbox.driver` now defaults to `null`, meaning "match the

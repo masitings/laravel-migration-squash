@@ -17,6 +17,7 @@ class Column
         public readonly ?bool $computed = null,
         /** @var array<int, string> Allowed values for enum/set columns */
         public readonly array $allowedValues = [],
+        public readonly ?string $comment = null,
     ) {}
 
     /**
@@ -34,7 +35,8 @@ class Column
             && $this->autoIncrement === $other->autoIncrement
             && $this->virtual === $other->virtual
             && $this->computed === $other->computed
-            && $this->allowedValues === $other->allowedValues;
+            && $this->allowedValues === $other->allowedValues
+            && $this->comment === $other->comment;
     }
 
     /**
@@ -60,6 +62,7 @@ class Column
             virtual: isset($columnInfo['extra']) && ($columnInfo['extra'] === 'VIRTUAL') ? true : null,
             computed: isset($columnInfo['extra']) && ($columnInfo['extra'] === 'ON UPDATE CURRENT_TIMESTAMP'),
             allowedValues: $columnInfo['allowed_values'] ?? [],
+            comment: $columnInfo['comment'] ?? null,
         );
     }
 }
