@@ -16,10 +16,14 @@
  */
 
 use Illuminate\Support\Facades\Schema;
+use MigrationSquash\Console\Commands\MigrateSquashCommand;
 use MigrationSquash\Generation\SquashedMigrationGenerator;
 use MigrationSquash\Introspection\SchemaIntrospector;
 use MigrationSquash\Sandbox\SandboxConnectionFactory;
+use MigrationSquash\Sandbox\SandboxRunner;
 use MigrationSquash\Schema\Column;
+use MigrationSquash\Schema\ForeignKey;
+use MigrationSquash\Schema\Index;
 use MigrationSquash\Schema\Table;
 
 test('the sandbox driver follows the application driver', function (string $appDriver, string $expected) {
@@ -27,7 +31,7 @@ test('the sandbox driver follows the application driver', function (string $appD
     config()->set('database.connections.app_under_test', ['driver' => $appDriver, 'database' => 'placeholder']);
     config()->set('migrationsquash.sandbox.driver', null);
 
-    $command = new class extends MigrationSquash\Console\Commands\MigrateSquashCommand
+    $command = new class extends MigrateSquashCommand
     {
         public function driverForTest(): ?string
         {
@@ -46,7 +50,7 @@ test('an unsupported application driver has no sandbox, so the squash is refused
     config()->set('database.default', 'app_under_test');
     config()->set('database.connections.app_under_test', ['driver' => 'pgsql', 'database' => 'placeholder']);
 
-    $command = new class extends MigrationSquash\Console\Commands\MigrateSquashCommand
+    $command = new class extends MigrateSquashCommand
     {
         public function driverForTest(): ?string
         {
@@ -95,7 +99,7 @@ test('SQLite cannot represent unsigned bigint, which is why the driver has to ma
         // On MySQL increments() is int, not bigint, so a foreign key from a
         // bigint column onto it fails with errno 150.
         expect($code)->toContain("\$table->increments('id')")
-            ->and($code)->not->toContain("\$table->id()");
+            ->and($code)->not->toContain('$table->id()');
     } finally {
         SandboxConnectionFactory::destroy($connection);
     }
@@ -154,13 +158,13 @@ test('a MySQL app squashed through a MySQL sandbox round trips exactly', functio
             }
 
             foreach ($data['indexes'] as $idx) {
-                $table->addIndex(new MigrationSquash\Schema\Index(
+                $table->addIndex(new Index(
                     $idx['name'], $idx['type'], $idx['columns'], $idx['options']
                 ));
             }
 
             foreach ($data['foreign_keys'] as $fk) {
-                $table->addForeignKey(new MigrationSquash\Schema\ForeignKey(
+                $table->addForeignKey(new ForeignKey(
                     name: $fk['name'],
                     column: $fk['column'],
                     referencedTable: $fk['referenced_table'],
@@ -184,7 +188,7 @@ test('a MySQL app squashed through a MySQL sandbox round trips exactly', functio
             file_put_contents(sprintf('%s/2024_01_01_%06d_s.php', $dir, $i), $content);
         }
 
-        (new MigrationSquash\Sandbox\SandboxRunner($replay))->run(glob($dir.'/*.php'));
+        (new SandboxRunner($replay))->run(glob($dir.'/*.php'));
 
         $result = (new SchemaIntrospector($replay))->getSnapshot();
     } finally {

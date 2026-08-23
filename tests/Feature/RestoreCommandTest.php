@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Schema;
 use MigrationSquash\Archiving\MigrationArchiver;
 use MigrationSquash\Introspection\SchemaIntrospector;
 use MigrationSquash\Sandbox\SandboxConnectionFactory;
-use MigrationSquash\Sandbox\SandboxRunner;
 
 function restoreWorkspace(): string
 {

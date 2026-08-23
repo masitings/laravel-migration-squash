@@ -107,7 +107,7 @@ function mysqlAvailable(): bool
         );
 
         $available = true;
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         $available = false;
     }
 

@@ -58,7 +58,7 @@ test('destroy drops the MySQL sandbox database', function () {
     );
 
     $rows = $pdo->query(
-        "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ".$pdo->quote($database)
+        'SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '.$pdo->quote($database)
     )->fetchAll();
 
     expect($rows)->toBeEmpty();
