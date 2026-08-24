@@ -7,13 +7,13 @@
 
 Combine multiple Laravel migration files into a single consolidated migration per table, with automated schema verification to ensure nothing is lost.
 
-> ⚠️ **v1.0.0 is non-functional and should not be used.** Please use v1.1.0 or later.
+> ⚠️ **v1.0.0 and v1.0.1 are non-functional and should not be used.** Both fatal-error before touching the database. Use v1.1.0 or later.
 
 ## How It Works
 
 1. **Scan** — discovers all migration files in `database/migrations/`
 2. **Guard** — detects migrations with raw SQL or data seeding and excludes them
-3. **Sandbox** — runs your migrations in an isolated SQLite in-memory database (never touches your real database)
+3. **Sandbox** — runs your migrations in an isolated sandbox on the same engine your app uses (never touches your real database)
 4. **Introspect** — reads the resulting schema (tables, columns, indexes, foreign keys)
 5. **Generate** — creates one clean migration per table, plus a separate FK migration
 6. **Verify** — runs the generated migrations and compares the schema to ensure they match
@@ -234,9 +234,9 @@ composer install
 composer test
 ```
 
-124 tests, 306 assertions, 85.8% line coverage.
+128 tests, 325 assertions, 87.2% line coverage.
 
-The six MySQL tests skip themselves unless a MySQL server is reachable, so the
+The MySQL tests skip themselves unless a MySQL server is reachable, so the
 suite is green on a machine that only has SQLite. Point them at a server to run
 them:
 

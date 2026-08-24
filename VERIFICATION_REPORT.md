@@ -21,9 +21,9 @@ DB_HOST=127.0.0.1 DB_USERNAME=root DB_PASSWORD= vendor/bin/pest --coverage
 
 | Metric | Value |
 |--------|-------|
-| Tests | 124 passed |
-| Assertions | 306 |
-| Line coverage | 85.8% |
+| Tests | 128 passed |
+| Assertions | 325 |
+| Line coverage | 87.2% |
 | Duration | ~3s |
 
 Verified on PHP 8.4.21, Laravel 12.67.0, orchestra/testbench 10.11.0,
@@ -55,7 +55,8 @@ database to reach.
 | Generated code | Every generated migration is checked with `php -l` |
 | Engine match | The sandbox driver is asserted to follow `database.default`; an unsupported engine resolves to "refuse", not "fall back to SQLite" |
 | Verification actually detects change | 17 audit tests build two schemas differing in exactly one attribute (nullability, default, length, type, missing column, missing index, unique downgraded to index, missing foreign key, changed onDelete, missing table, enum values, SQLite collation, MySQL collation, unsigned, comment) and assert each difference is reported |
-| Restore | Hash mismatch, missing manifest entry and existing destination each abort the whole restore |
+| Restore | Hash mismatch, missing manifest entry and existing destination each abort the whole restore; restoring a 15-file history returns every file byte for byte |
+| End to end on a realistic history | 15 migrations with drift, enum, JSON, composite primary key and late-attached foreign keys squash to an empty diff, and the squashed output migrates from scratch on both SQLite and MySQL |
 
 ## Reproducing the safety claims
 
@@ -80,10 +81,13 @@ find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
   proven or disproven by the first CI run.
 - **Pint.** The code follows the Laravel preset by eye but `vendor/bin/pint`
   has not been run against it.
-- **A real Laravel application.** Everything here runs through Orchestra
-  Testbench against synthetic migration folders. That is not the same as one
-  application with a long, messy migration history. Run `migrate:squash
-  --dry-run` there before trusting it; that mode writes nothing.
+- **A real production application.** The suite now includes a 15-migration
+  history shaped like a real app, squashed end to end on both SQLite and
+  MySQL, with the squashed output replayed against an empty database and
+  compared to the original schema. That closes most of this gap, but it is
+  still a fixture rather than someone's actual repository. Run
+  `migrate:squash --dry-run` on yours before trusting it; that mode writes
+  nothing.
 
 ## Known limitations
 

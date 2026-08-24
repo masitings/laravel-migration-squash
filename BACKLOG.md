@@ -30,10 +30,16 @@ This is the third such thing.
 
 ### 2. Never run against a real Laravel application
 
-All 124 tests use Orchestra Testbench against synthetic migration folders. That
-is not the same as one application with a long, messy migration history.
+Largely closed. `tests/Feature/RealisticAppTest.php` now builds a
+15-migration history shaped like a real app, squashes it for real, replays
+**only the squashed output** against an empty database and compares the
+resulting schema. It passes on SQLite and MySQL, and a companion test restores
+the archive byte for byte.
 
-- [ ] Run `php artisan migrate:squash --dry-run` on a real app
+What remains is confirmation on an actual repository, which no fixture can
+substitute for:
+
+- [ ] Run `php artisan migrate:squash --dry-run` on your own app
 - [ ] Confirm the schema diff comes back empty
 
 `--dry-run` writes nothing, so this is safe to do at any time.
@@ -111,8 +117,8 @@ the current behaviour.
 
 | | |
 |---|---|
-| Tests | 124 passed, 306 assertions |
-| Line coverage | 85.8% |
+| Tests | 128 passed, 325 assertions |
+| Line coverage | 87.2% |
 | Verified on | PHP 8.4.21, Laravel 12.67.0, testbench 10.11.0, Pest 3.8.7, MariaDB 10.11.14 |
 | Pint | clean (it only ever reformatted test files; `src/` was already conforming) |
 | Not verified | the CI matrix, and any real application |

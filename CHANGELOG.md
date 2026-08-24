@@ -2,10 +2,15 @@
 
 All notable changes to `laravel-migration-squash` will be documented in this file.
 
-## [Unreleased]
+## [v1.1.0] - 2026-08-23
 
-Second remediation pass. Six defects found in review of the v1.1.0 work,
-all covered by regression tests.
+First release that actually works. v1.0.0 and v1.0.1 are non-functional and
+should not be used; see the notice under v1.0.0 below.
+
+Six remediation passes, each one finding defects the previous pass had left
+behind. Everything below is covered by the test suite: 128 tests, 325
+assertions, 87.2% line coverage, run against PHP 8.4 / Laravel 12 / MariaDB
+10.11.
 
 ### Fixed
 
@@ -74,6 +79,14 @@ tests rather than only read:
 - `SandboxConnectionFactory::SANDBOX_DB_PREFIX` as the guard for MySQL
   sandbox teardown.
 - `Column::$allowedValues` and the `column_enum_values_mismatch` diff type.
+- `tests/Feature/RealisticAppTest.php` — a 15-migration history shaped like a
+  real application (framework tables, a domain on top, then columns added,
+  indexes attached later, foreign keys bolted on afterwards, an enum, a JSON
+  column and a composite primary key). It squashes for real, runs **only the
+  squashed output against an empty database**, and compares the result to the
+  schema the original history produced. Runs on SQLite and MySQL. A companion
+  test restores the archive and asserts every original file comes back byte for
+  byte.
 - `tests/Feature/TableFilterTest.php`, `tests/Feature/SchemaShapesTest.php` and
   `tests/Unit/ValueObjectsTest.php` — 16 further tests covering the `--table`
   refusal, and round trips for tables with no `id`, composite primary keys,
