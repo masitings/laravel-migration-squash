@@ -2,6 +2,33 @@
 
 All notable changes to `laravel-migration-squash` will be documented in this file.
 
+## [v1.2.0] - 2026-09-13
+
+Minor release adding full PostgreSQL (`pgsql`) and SQL Server (`sqlsrv`) support across introspection, sandbox execution, and schema verification. No breaking changes.
+
+### Added
+
+- **PostgreSQL (`pgsql`) support:**
+  - Introspection for PostgreSQL schemas (`information_schema.tables`, `information_schema.columns`, `pg_catalog.pg_index`, `information_schema.table_constraints`).
+  - Automatic `serial` / `bigserial` auto-increment detection.
+  - Native PostgreSQL enum type parsing (`pg_catalog.pg_enum` / `pg_catalog.pg_type`).
+  - Per-column collation comparison against database-level collation (`pg_database.datcollate`).
+  - PostgreSQL sandbox support (`createPostgres()`) creating temporary `laravel_squash_*` databases with `search_path` set to `public`.
+  - Terminate active connections prior to dropping PostgreSQL sandbox databases in `destroy()`.
+  - PostgreSQL sandbox reset (`freshPostgres()`) using multi-table `DROP TABLE ... CASCADE`.
+  - Feature test suite (`PostgresSquashTest.php`) and mocked unit test suite (`PostgresIntrospectionTest.php`).
+- **SQL Server (`sqlsrv`) support:**
+  - Introspection for SQL Server schemas (`INFORMATION_SCHEMA.TABLES`, `INFORMATION_SCHEMA.COLUMNS`, `sys.indexes`, `sys.foreign_keys`, `sys.check_constraints`).
+  - Identity column auto-increment detection.
+  - CHECK constraint parsing for enum-like `IN (...)` column rules.
+  - Per-column collation comparison against database-level collation (`DATABASEPROPERTYEX`).
+  - SQL Server sandbox support (`createSqlServer()`) creating temporary `laravel_squash_*` databases.
+  - Set `SINGLE_USER WITH ROLLBACK IMMEDIATE` prior to dropping SQL Server sandbox databases in `destroy()`.
+  - SQL Server sandbox reset (`freshSqlServer()`) dropping foreign key constraints before dropping tables.
+  - Feature test suite (`SqlServerSquashTest.php`) and mocked unit test suite (`SqlServerIntrospectionTest.php`).
+- **Type Normalization:** extended `normalizeType()` to map PostgreSQL types (`character varying`, `character`, `int4`, `int8`, `float4`, `float8`, `bool`, `timestamptz`, `timestamp without time zone`, `bytea`, `jsonb`, `serial`, `bigserial`, etc.) and SQL Server types (`nvarchar`, `nchar`, `ntext`, `bit`, `datetime2`, `datetimeoffset`, `money`, `smallmoney`, `uniqueidentifier`, `image`, `varbinary(max)`, etc.) to canonical forms.
+- **Config & Command updates:** added `pgsql_*` and `sqlsrv_*` sandbox keys to `config/migrationsquash.php`. `--driver` option in `migrate:squash` now accepts `pgsql` and `sqlsrv`.
+
 ## [v1.1.0] - 2026-08-23
 
 First release that actually works. v1.0.0 and v1.0.1 are non-functional and

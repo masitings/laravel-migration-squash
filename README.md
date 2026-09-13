@@ -86,7 +86,7 @@ php artisan migrate:squash:restore --keep-squashed # restore without removing ge
 |--------|-------------|
 | `--dry-run` | Generate and verify without archiving |
 | `--check` | Only check for guarded migrations |
-| `--driver=sqlite` | Force sandbox driver (`sqlite` or `mysql`) |
+| `--driver=sqlite` | Force sandbox driver (`sqlite`, `mysql`, `pgsql`, or `sqlsrv`) |
 | `--table=users` | Squash only specific tables (repeatable) |
 
 `--table` matches on the migration filename, not on the tables a migration
@@ -125,6 +125,8 @@ So the driver is chosen from `database.default`:
 | Your app runs on | Sandbox |
 |------------------|---------|
 | `mysql` / `mariadb` | MySQL (temporary `laravel_squash_*` database) |
+| `pgsql` | PostgreSQL (temporary `laravel_squash_*` database) |
+| `sqlsrv` | SQL Server (temporary `laravel_squash_*` database) |
 | `sqlite` | SQLite in-memory |
 | anything else | refused, rather than verified against the wrong engine |
 
@@ -220,12 +222,13 @@ return [
 |--------|--------|
 | SQLite | ✅ Full support, covered by the test suite (default sandbox) |
 | MySQL | ✅ Supported, covered end-to-end by the test suite |
-| PostgreSQL | 🔜 Planned for v1.2.0 |
-| SQL Server | 🔜 Planned for v1.2.0 |
+| PostgreSQL | ✅ Supported, covered by the test suite |
+| SQL Server | ✅ Supported, covered by the test suite |
 
-The MySQL sandbox creates and drops a temporary `laravel_squash_*` database,
-so the configured MySQL user needs `CREATE DATABASE` privileges. Teardown will
-only ever drop a database whose name carries that prefix.
+The temporary `laravel_squash_*` sandbox database requires specific user privileges per driver:
+- **MySQL**: `CREATE DATABASE` privileges.
+- **PostgreSQL**: `CREATEDB` privileges.
+- **SQL Server**: `CREATE ANY DATABASE` or `dbcreator` role.
 
 ## Testing
 
@@ -234,14 +237,12 @@ composer install
 composer test
 ```
 
-128 tests, 325 assertions, 87.2% line coverage.
-
-The MySQL tests skip themselves unless a MySQL server is reachable, so the
-suite is green on a machine that only has SQLite. Point them at a server to run
-them:
+The MySQL, PostgreSQL, and SQL Server tests skip themselves unless a matching database server is reachable, so the suite is green on a machine that only has SQLite. Point them at a server to run them:
 
 ```bash
 DB_HOST=127.0.0.1 DB_USERNAME=root DB_PASSWORD= composer test
+PGSQL_HOST=127.0.0.1 PGSQL_USERNAME=postgres PGSQL_PASSWORD= composer test
+SQLSRV_HOST=127.0.0.1 SQLSRV_USERNAME=sa SQLSRV_PASSWORD= composer test
 ```
 
 Coverage needs pcov or xdebug installed:

@@ -20,12 +20,24 @@ return [
         // reports success because it compared SQLite against SQLite.
         'driver' => env('MIGRATION_SQUASH_DRIVER'),
 
-        // If using MySQL, these will be used to create temporary database
+        // If using MySQL, PostgreSQL, or SQL Server, these will be used to create temporary database
         'mysql_host' => env('DB_HOST', '127.0.0.1'),
         'mysql_port' => env('DB_PORT', '3306'),
         'mysql_database' => 'laravel_squash_temp_',
         'mysql_username' => env('DB_USERNAME', 'root'),
         'mysql_password' => env('DB_PASSWORD', ''),
+
+        'pgsql_host' => env('DB_HOST', '127.0.0.1'),
+        'pgsql_port' => env('DB_PORT', '5432'),
+        'pgsql_database' => 'laravel_squash_temp_',
+        'pgsql_username' => env('DB_USERNAME', 'postgres'),
+        'pgsql_password' => env('DB_PASSWORD', ''),
+
+        'sqlsrv_host' => env('DB_HOST', '127.0.0.1'),
+        'sqlsrv_port' => env('DB_PORT', '1433'),
+        'sqlsrv_database' => 'laravel_squash_temp_',
+        'sqlsrv_username' => env('DB_USERNAME', 'sa'),
+        'sqlsrv_password' => env('DB_PASSWORD', ''),
     ],
 
     /*

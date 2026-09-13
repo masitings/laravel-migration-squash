@@ -12,11 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('{{TABLE_NAME}}', function (Blueprint $table) {
-            {{COLUMNS}}
-
-            {{PRIMARY_KEY}}
-
-            {{INDEXES}}
+{{COLUMNS}}
+{{PRIMARY_KEY}}
+{{INDEXES}}
         });
     }
 

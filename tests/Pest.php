@@ -113,3 +113,65 @@ function mysqlAvailable(): bool
 
     return $available;
 }
+
+/**
+ * Is a PostgreSQL server reachable with the configured credentials?
+ */
+function postgresAvailable(): bool
+{
+    static $available = null;
+
+    if ($available !== null) {
+        return $available;
+    }
+
+    try {
+        new PDO(
+            sprintf(
+                'pgsql:host=%s;port=%s;dbname=postgres',
+                env('PGSQL_HOST', env('DB_HOST', '127.0.0.1')),
+                env('PGSQL_PORT', env('DB_PORT', '5432')),
+            ),
+            env('PGSQL_USERNAME', env('DB_USERNAME', 'postgres')),
+            env('PGSQL_PASSWORD', env('DB_PASSWORD', '')),
+            [PDO::ATTR_TIMEOUT => 3],
+        );
+
+        $available = true;
+    } catch (Throwable) {
+        $available = false;
+    }
+
+    return $available;
+}
+
+/**
+ * Is a SQL Server reachable with the configured credentials?
+ */
+function sqlServerAvailable(): bool
+{
+    static $available = null;
+
+    if ($available !== null) {
+        return $available;
+    }
+
+    try {
+        new PDO(
+            sprintf(
+                'sqlsrv:Server=%s,%s;Database=master',
+                env('SQLSRV_HOST', env('DB_HOST', '127.0.0.1')),
+                env('SQLSRV_PORT', env('DB_PORT', '1433')),
+            ),
+            env('SQLSRV_USERNAME', env('DB_USERNAME', 'sa')),
+            env('SQLSRV_PASSWORD', env('DB_PASSWORD', '')),
+            [PDO::ATTR_TIMEOUT => 3],
+        );
+
+        $available = true;
+    } catch (Throwable) {
+        $available = false;
+    }
+
+    return $available;
+}
