@@ -69,6 +69,47 @@ class SandboxRunner
     }
 
     /**
+     * Roll the given migrations back against the sandbox connection.
+     *
+     * Used to prove the generated down() methods work. Nothing in the squash
+     * flow itself rolls back, which is precisely why a broken dropForeign()
+     * went unnoticed for so long.
+     *
+     * @param  array<string>  $migrationFiles
+     */
+    public function rollback(array $migrationFiles): bool
+    {
+        $tempPath = null;
+
+        try {
+            $tempPath = sys_get_temp_dir().'/migrate-squash-rollback-'.uniqid();
+            mkdir($tempPath, 0755, true);
+
+            foreach ($migrationFiles as $file) {
+                copy($file, $tempPath.'/'.basename($file));
+            }
+
+            Artisan::call('migrate:rollback', [
+                '--database' => $this->connectionName,
+                '--path' => $tempPath,
+                '--realpath' => true,
+                '--step' => 0,
+                '--force' => true,
+            ]);
+
+            $this->deleteDirectory($tempPath);
+
+            return true;
+        } catch (\Throwable $e) {
+            if ($tempPath !== null) {
+                $this->deleteDirectory($tempPath);
+            }
+
+            throw new \RuntimeException("Failed to roll back sandbox migrations: {$e->getMessage()}", 0, $e);
+        }
+    }
+
+    /**
      * Fresh start the sandbox (drop all tables).
      *
      * For SQLite in-memory: disconnect and reconnect (cheapest reset).
@@ -78,11 +119,13 @@ class SandboxRunner
     {
         $driver = config("database.connections.{$this->connectionName}.driver");
 
-        if ($driver === 'sqlite') {
-            $this->freshSQLite();
-        } else {
-            $this->freshMySQL();
-        }
+        match ($driver) {
+            'sqlite' => $this->freshSQLite(),
+            'mysql' => $this->freshMySQL(),
+            'pgsql' => $this->freshPostgres(),
+            'sqlsrv' => $this->freshSqlServer(),
+            default => throw new \RuntimeException("Unsupported driver '{$driver}' for sandbox reset."),
+        };
     }
 
     /**
@@ -113,6 +156,55 @@ class SandboxRunner
             }
         } finally {
             $connection->statement('SET FOREIGN_KEY_CHECKS=1');
+        }
+    }
+
+    /**
+     * Reset PostgreSQL by dropping all tables in current schema.
+     */
+    protected function freshPostgres(): void
+    {
+        $connection = DB::connection($this->connectionName);
+
+        $tables = $connection->select("
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_type = 'BASE TABLE'
+        ");
+
+        if (empty($tables)) {
+            return;
+        }
+
+        $tableNames = array_map(fn ($t) => '"'.$t->table_name.'"', $tables);
+        $sql = 'DROP TABLE IF EXISTS '.implode(', ', $tableNames).' CASCADE';
+        $connection->statement($sql);
+    }
+
+    /**
+     * Reset SQL Server by dropping foreign keys then dropping all tables.
+     */
+    protected function freshSqlServer(): void
+    {
+        $connection = DB::connection($this->connectionName);
+
+        $fks = $connection->select('
+            SELECT fk.name AS constraint_name, t.name AS table_name
+            FROM sys.foreign_keys fk
+            JOIN sys.tables t ON fk.parent_object_id = t.object_id
+        ');
+
+        foreach ($fks as $fk) {
+            $connection->statement("ALTER TABLE [{$fk->table_name}] DROP CONSTRAINT [{$fk->constraint_name}]");
+        }
+
+        $tables = $connection->select("
+            SELECT name FROM sys.tables WHERE type = 'U'
+        ");
+
+        foreach ($tables as $t) {
+            $connection->statement("DROP TABLE IF EXISTS [{$t->name}]");
         }
     }
 

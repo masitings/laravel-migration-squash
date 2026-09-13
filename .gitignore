@@ -3,3 +3,6 @@
 /.phpunit.cache/
 composer.lock
 .env
+
+# Article draft, not part of the package
+/ARTICLE-DRAFT.md

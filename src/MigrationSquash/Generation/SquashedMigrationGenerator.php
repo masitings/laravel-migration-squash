@@ -33,14 +33,12 @@ class SquashedMigrationGenerator
         $primaryKeyCode = $this->generatePrimaryKey($table);
         $indexesCode = $this->generateIndexes($table);
 
-        $replacements = [
+        return $this->fill($stub, [
             '{{TABLE_NAME}}' => $table->name,
             '{{COLUMNS}}' => $columnsCode,
             '{{PRIMARY_KEY}}' => $primaryKeyCode,
             '{{INDEXES}}' => $indexesCode,
-        ];
-
-        return str_replace(array_keys($replacements), array_values($replacements), $stub);
+        ]);
     }
 
     /**
@@ -82,11 +80,17 @@ class SquashedMigrationGenerator
                 .implode("\n", $tableDefinitions)."\n"
                 .'        });';
 
-            $fkColumns = array_map(fn (ForeignKey $fk) => "'{$fk->column}'", $table->foreignKeys);
-            $columnsArray = '['.implode(', ', $fkColumns).']';
+            // One dropForeign() per key. Passing every column in a single
+            // array makes Laravel build ONE index name out of all of them
+            // (comments_parent_id_project_id_user_id_foreign), which does not
+            // exist, so the rollback fails.
+            $dropLines = array_map(
+                fn (ForeignKey $fk) => "            \$table->dropForeign(['{$fk->column}']);",
+                $table->foreignKeys,
+            );
 
             $drops[] = "        Schema::table('{$table->name}', function (Blueprint \$table) {\n"
-                ."            \$table->dropForeign({$columnsArray});\n"
+                .implode("\n", $dropLines)."\n"
                 .'        });';
         }
 
@@ -96,11 +100,38 @@ class SquashedMigrationGenerator
 
         $stub = file_get_contents($this->fkStubPath);
 
-        return str_replace(
-            ['{{FOREIGN_KEY_DEFINITIONS}}', '{{FOREIGN_KEY_DROPS}}'],
-            [implode("\n\n", $definitions), implode("\n\n", $drops)],
-            $stub,
-        );
+        return $this->fill($stub, [
+            '{{FOREIGN_KEY_DEFINITIONS}}' => implode("\n\n", $definitions),
+            '{{FOREIGN_KEY_DROPS}}' => implode("\n\n", $drops),
+        ]);
+    }
+
+    /**
+     * Fill a stub, dropping any line that consists only of an empty placeholder.
+     *
+     * Placeholders that own a whole line (columns, primary key, indexes) carry
+     * their own indentation in the generated code. Substituting an empty value
+     * would otherwise leave a blank line full of stray whitespace behind, which
+     * is a poor look for a tool whose output is meant to be a clean migration.
+     *
+     * @param  array<string, string>  $replacements
+     */
+    protected function fill(string $stub, array $replacements): string
+    {
+        foreach ($replacements as $token => $value) {
+            if ($value === '') {
+                // Remove the whole line, including its newline.
+                $stub = preg_replace(
+                    '/^[ \t]*'.preg_quote($token, '/').'[ \t]*\R/m',
+                    '',
+                    $stub,
+                );
+            }
+
+            $stub = str_replace($token, $value, $stub);
+        }
+
+        return $stub;
     }
 
     /**

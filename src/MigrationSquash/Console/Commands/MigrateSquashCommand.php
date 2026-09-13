@@ -26,7 +26,7 @@ class MigrateSquashCommand extends Command
         migrate:squash
                     {--dry-run : Generate and verify without archiving old migrations}
                     {--check : Only check for guarded migrations, don\'t run squash}
-                    {--driver= : Force sandbox database driver (sqlite or mysql)}
+                    {--driver= : Force sandbox database driver (sqlite, mysql, pgsql, or sqlsrv)}
                     {--table=* : Squash only specific tables (can be repeated)}
     ';
 
@@ -317,9 +317,9 @@ class MigrateSquashCommand extends Command
         $forceDriver = $this->option('driver') ?: config('migrationsquash.sandbox.driver');
 
         if ($forceDriver !== null && $forceDriver !== '') {
-            if (! in_array($forceDriver, ['sqlite', 'mysql'], true)) {
+            if (! in_array($forceDriver, ['sqlite', 'mysql', 'pgsql', 'sqlsrv'], true)) {
                 throw new \InvalidArgumentException(
-                    "Invalid sandbox driver '{$forceDriver}'. Must be 'sqlite' or 'mysql'."
+                    "Invalid sandbox driver '{$forceDriver}'. Must be 'sqlite', 'mysql', 'pgsql', or 'sqlsrv'."
                 );
             }
 
@@ -342,7 +342,7 @@ class MigrateSquashCommand extends Command
             if ($driver === null) {
                 $this->error("❌ No sandbox available for the '{$appDriver}' driver.");
                 $this->line('   Squashing is only sound when the sandbox runs the same engine as');
-                $this->line('   your application. Supported: sqlite, mysql, mariadb.');
+                $this->line('   your application. Supported: sqlite, mysql, mariadb, pgsql, sqlsrv.');
                 $this->line('   Override with --driver=sqlite only if you understand the risk.');
 
                 throw new \RuntimeException("Unsupported application driver '{$appDriver}'.");
@@ -384,6 +384,8 @@ class MigrateSquashCommand extends Command
         return match ($applicationDriver) {
             'sqlite' => 'sqlite',
             'mysql', 'mariadb' => 'mysql',
+            'pgsql' => 'pgsql',
+            'sqlsrv' => 'sqlsrv',
             default => null,
         };
     }

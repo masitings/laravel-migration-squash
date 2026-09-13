@@ -44,11 +44,13 @@ test('the sandbox driver follows the application driver', function (string $appD
     ['mysql', 'mysql'],
     ['mariadb', 'mysql'],
     ['sqlite', 'sqlite'],
+    ['pgsql', 'pgsql'],
+    ['sqlsrv', 'sqlsrv'],
 ]);
 
 test('an unsupported application driver has no sandbox, so the squash is refused', function () {
     config()->set('database.default', 'app_under_test');
-    config()->set('database.connections.app_under_test', ['driver' => 'pgsql', 'database' => 'placeholder']);
+    config()->set('database.connections.app_under_test', ['driver' => 'oracle', 'database' => 'placeholder']);
 
     $command = new class extends MigrateSquashCommand
     {
